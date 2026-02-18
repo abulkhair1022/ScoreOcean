@@ -14,7 +14,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
 
 ## Tasks
 
-- [ ] 1. Project Setup and Infrastructure
+- [x] 1. Project Setup and Infrastructure
   - Initialize monorepo with Node.js, TypeScript, and Express.js
   - Set up backend API structure with Express routes
   - Configure PostgreSQL database with connection pooling (using pg or Prisma)
@@ -27,8 +27,8 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
   - Configure Tailwind CSS for styling
   - _Requirements: All (foundational)_
 
-- [ ] 2. Authentication Service Implementation
-  - [ ] 2.1 Implement user registration with role selection
+- [x] 2. Authentication Service Implementation
+  - [x] 2.1 Implement user registration with role selection
     - Create User and UserProfile database models
     - Implement password hashing with bcrypt
     - Implement email uniqueness validation
@@ -41,7 +41,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 5: Email uniqueness constraint**
     - **Validates: Requirements 1.1, 1.2, 1.5, 1.6**
   
-  - [ ] 2.3 Implement JWT-based authentication
+  - [x] 2.3 Implement JWT-based authentication
     - Generate access and refresh tokens
     - Implement login endpoint
     - Implement token validation middleware
@@ -53,8 +53,8 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 4: Wrong credentials fail authentication**
     - **Validates: Requirements 1.3, 1.4**
 
-- [ ] 3. User Profile Service Implementation
-  - [ ] 3.1 Implement profile management
+- [x] 3. User Profile Service Implementation
+  - [x] 3.1 Implement profile management
     - Create profile CRUD endpoints
     - Implement profile data validation
     - Add profile image upload to object storage
@@ -64,7 +64,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 6: Profile data persistence**
     - **Validates: Requirements 2.1, 2.4**
   
-  - [ ] 3.3 Implement sport profile management
+  - [x] 3.3 Implement sport profile management
     - Create sport-specific profile schemas (Cricket, Football, Kabaddi, Volleyball)
     - Implement add sport profile endpoint
     - Implement sport validation
@@ -77,11 +77,11 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 9: Statistics aggregation correctness**
     - **Validates: Requirements 2.2, 2.3, 2.5, 2.6, 13.1-13.4**
 
-- [ ] 4. Checkpoint - Ensure authentication and profiles work
+- [x] 4. Checkpoint - Ensure authentication and profiles work
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Team Service Implementation
-  - [ ] 5.1 Implement team creation and management
+- [x] 5. Team Service Implementation
+  - [x] 5.1 Implement team creation and management
     - Create Team and TeamRoster database models
     - Implement team CRUD endpoints
     - Implement roster size validation by sport
@@ -92,7 +92,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 16: Roster size constraints**
     - **Validates: Requirements 3.1, 3.6**
   
-  - [ ] 5.3 Implement team invitation system
+  - [x] 5.3 Implement team invitation system
     - Create TeamInvitation database model
     - Implement invite player endpoint
     - Implement accept/decline invitation endpoints
@@ -105,7 +105,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 14: Invitation decline removes invitation**
     - **Validates: Requirements 3.2, 3.3, 3.4**
   
-  - [ ] 5.5 Implement roster management
+  - [x] 5.5 Implement roster management
     - Implement add/remove player endpoints
     - Implement roster validation for tournament registration
     - _Requirements: 3.5, 3.7_
@@ -114,8 +114,8 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 15: Roster removal updates immediately**
     - **Validates: Requirements 3.5**
 
-- [ ] 6. Tournament Service Implementation
-  - [ ] 6.1 Implement tournament creation
+- [x] 6. Tournament Service Implementation
+  - [x] 6.1 Implement tournament creation
     - Create Tournament database model
     - Implement tournament CRUD endpoints
     - Implement format validation (League, Knockout, Group+Knockout)
@@ -128,7 +128,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 22: Role-based tournament creation**
     - **Validates: Requirements 4.1, 4.2, 4.7**
   
-  - [ ] 6.3 Implement tournament lifecycle management
+  - [x] 6.3 Implement tournament lifecycle management
     - Implement status state machine (Draft → Registration_Open → etc.)
     - Implement publish tournament endpoint
     - Implement deadline enforcement
@@ -142,7 +142,7 @@ Each task builds on previous work, with regular checkpoints to ensure quality an
     - **Property 72: Tournament status transitions**
     - **Validates: Requirements 4.3, 4.4, 4.6, 18.1-18.8**
 
-- [ ] 7. Checkpoint - Ensure teams and tournaments work
+- [x] 7. Checkpoint - Ensure teams and tournaments work
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Payment Service Implementation
