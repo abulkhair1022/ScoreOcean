@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { apiClient } from '../api/client';
+import apiClient from '../api/client';
 
 function Tournaments() {
   const navigate = useNavigate();
