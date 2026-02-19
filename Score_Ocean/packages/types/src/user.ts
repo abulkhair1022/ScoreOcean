@@ -82,6 +82,8 @@ export interface PerformanceStats {
   aggregated: SportStats;
   matchCount: number;
   trends: StatsTrend[];
+  teamAverage?: SportStats;
+  sportAverage?: SportStats;
 }
 
 export interface StatsTrend {

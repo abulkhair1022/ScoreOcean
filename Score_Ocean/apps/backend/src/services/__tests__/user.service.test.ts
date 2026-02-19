@@ -366,6 +366,7 @@ describe('UserService', () => {
       const userId = 'user-123';
       const filters = { sport: Sport.CRICKET };
 
+      // Mock main query for player performances
       mockQuery.mockResolvedValueOnce({
         rows: [
           {
@@ -380,6 +381,16 @@ describe('UserService', () => {
           },
         ],
         rowCount: 2,
+      } as any);
+
+      // Mock query for sport average calculation
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            statistics: { runs: 40, wickets: 1, battingAverage: 40, bowlingAverage: 30, strikeRate: 95 },
+          },
+        ],
+        rowCount: 1,
       } as any);
 
       const result = await userService.getPerformanceStats(userId, filters);
@@ -410,12 +421,35 @@ describe('UserService', () => {
       const userId = 'user-123';
       const filters = { tournamentId: 'tournament-123' };
 
+      // Mock main query for player performances
       mockQuery.mockResolvedValueOnce({
         rows: [
           {
             statistics: { goals: 2, assists: 1, cleanSheets: 0, saves: 0, yellowCards: 0, redCards: 0 },
             sport: Sport.FOOTBALL,
             end_time: new Date(),
+            team_id: 'team-123',
+            tournament_id: 'tournament-123',
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      // Mock query for team average calculation
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            statistics: { goals: 1, assists: 1, cleanSheets: 0, saves: 0, yellowCards: 0, redCards: 0 },
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      // Mock query for sport average calculation
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            statistics: { goals: 1.5, assists: 0.5, cleanSheets: 0, saves: 0, yellowCards: 0, redCards: 0 },
           },
         ],
         rowCount: 1,

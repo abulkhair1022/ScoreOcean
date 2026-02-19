@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
 import { UserRole } from '@score-ocean/types';
 import { AppError } from '../middleware/errorHandler';
+import { validate } from '../middleware/validation';
+import { authSchemas } from '../middleware/validationSchemas';
 
 const router = Router();
 
@@ -10,18 +12,9 @@ const router = Router();
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', validate(authSchemas.register), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, role, name, age, city, state, country, phone } = req.body;
-
-    // Validate required fields
-    if (!email || !password || !role || !name) {
-      throw new AppError(
-        'Missing required fields. Email, password, role, and name are required.',
-        400,
-        'VALIDATION_ERROR'
-      );
-    }
 
     console.log(`[AUTH] Registration attempt for email: ${email}, role: ${role}`);
 
@@ -58,18 +51,9 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
  * @desc    Login user
  * @access  Public
  */
-router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', validate(authSchemas.login), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
-
-    // Validate required fields
-    if (!email || !password) {
-      throw new AppError(
-        'Missing required fields. Email and password are required.',
-        400,
-        'VALIDATION_ERROR'
-      );
-    }
 
     console.log(`[AUTH] Login attempt for email: ${email}`);
 
@@ -96,17 +80,9 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
  * @desc    Refresh access token
  * @access  Public
  */
-router.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/refresh', validate(authSchemas.refresh), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      throw new AppError(
-        'Missing required field. Refresh token is required.',
-        400,
-        'VALIDATION_ERROR'
-      );
-    }
 
     console.log('[AUTH] Token refresh attempt');
 

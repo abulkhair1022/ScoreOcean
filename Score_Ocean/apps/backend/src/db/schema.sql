@@ -216,6 +216,16 @@ CREATE TABLE IF NOT EXISTS payments (
   completed_at TIMESTAMP
 );
 
+-- Payouts table
+CREATE TABLE IF NOT EXISTS payouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  host_id UUID REFERENCES users(id),
+  amount DECIMAL(10, 2) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'REQUESTED',
+  requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processed_at TIMESTAMP
+);
+
 -- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -271,5 +281,7 @@ CREATE INDEX IF NOT EXISTS idx_auction_players_auction ON auction_players(auctio
 CREATE INDEX IF NOT EXISTS idx_auction_bids_auction ON auction_bids(auction_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_tournament ON payments(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_payouts_host ON payouts(host_id);
+CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read);

@@ -51,8 +51,7 @@ export class TeamService {
     // Map rows to Team objects
     const teams = await Promise.all(
       allTeamRows.map(async (row) => {
-        const roster = await this.getRoster(row.id);
-        return this.mapRowToTeam(row, roster);
+        return this.mapRowToTeam(row);
       })
     );
 

@@ -1,13 +1,41 @@
 import { Router } from 'express';
 import { userService } from '../services/user.service';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { UserRole } from '@score-ocean/types';
+import { AppError } from '../middleware/errorHandler';
+import { validate } from '../middleware/validation';
+import { userSchemas } from '../middleware/validationSchemas';
 
 const router = Router();
 
+/**
+ * Middleware to check if user can modify the profile
+ * Users can only modify their own profile unless they're admin
+ */
+const requireProfileOwnership = (req: AuthRequest, _res: any, next: any) => {
+  if (!req.user) {
+    return next(new AppError('Authentication required', 401));
+  }
+
+  const targetUserId = req.params.id;
+  
+  // Admin users have unrestricted access
+  if (req.user.role === UserRole.ADMIN) {
+    return next();
+  }
+
+  // Users can only modify their own profile
+  if (targetUserId !== req.user.userId) {
+    return next(new AppError('You do not have permission to modify this profile', 403));
+  }
+
+  next();
+};
+
 // Get current user's profile
-router.get('/profile', authenticate, async (req, res, next) => {
+router.get('/profile', authenticate, async (req: AuthRequest, res, next) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user!.userId;
     const user = await userService.getProfile(userId);
     res.json(user);
   } catch (error: any) {
@@ -26,21 +54,11 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-// Create user profile
-router.post('/:id/profile', authenticate, async (req, res, next) => {
+// Create user profile - requires ownership
+router.post('/:id/profile', authenticate, requireProfileOwnership, validate(userSchemas.createProfile), async (req, res, next) => {
   try {
     const { id } = req.params;
     const profile = req.body;
-
-    // Validate required fields
-    if (!profile.name || !profile.location || !profile.contactDetails) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Missing required fields: name, location, contactDetails',
-        },
-      });
-    }
 
     const user = await userService.createProfile(id, profile);
     return res.status(201).json(user);
@@ -49,8 +67,8 @@ router.post('/:id/profile', authenticate, async (req, res, next) => {
   }
 });
 
-// Update user profile
-router.put('/:id/profile', authenticate, async (req, res, next) => {
+// Update user profile - requires ownership
+router.put('/:id/profile', authenticate, requireProfileOwnership, validate(userSchemas.updateProfile), async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -62,8 +80,8 @@ router.put('/:id/profile', authenticate, async (req, res, next) => {
   }
 });
 
-// Delete user profile
-router.delete('/:id/profile', authenticate, async (req, res, next) => {
+// Delete user profile - requires ownership
+router.delete('/:id/profile', authenticate, requireProfileOwnership, async (req, res, next) => {
   try {
     const { id } = req.params;
     await userService.deleteProfile(id);
@@ -73,20 +91,11 @@ router.delete('/:id/profile', authenticate, async (req, res, next) => {
   }
 });
 
-// Sport profile routes
-router.post('/:id/sport-profiles', authenticate, async (req, res, next) => {
+// Sport profile routes - requires ownership
+router.post('/:id/sport-profiles', authenticate, requireProfileOwnership, validate(userSchemas.addSportProfile), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { sport } = req.body;
-
-    if (!sport) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Sport is required',
-        },
-      });
-    }
 
     const sportProfile = await userService.addSportProfile(id, sport);
     return res.status(201).json(sportProfile);
@@ -95,7 +104,7 @@ router.post('/:id/sport-profiles', authenticate, async (req, res, next) => {
   }
 });
 
-router.put('/:id/sport-profiles/:sportId', authenticate, async (req, res, next) => {
+router.put('/:id/sport-profiles/:sportId', authenticate, requireProfileOwnership, async (req, res, next) => {
   try {
     const { id, sportId } = req.params;
     const stats = req.body;
@@ -107,7 +116,7 @@ router.put('/:id/sport-profiles/:sportId', authenticate, async (req, res, next) 
   }
 });
 
-router.get('/:id/performance-stats', authenticate, async (req, res, next) => {
+router.get('/:id/performance-stats', authenticate, validate(userSchemas.getPerformanceStats), async (req, res, next) => {
   try {
     const { id } = req.params;
     const filters: any = {};

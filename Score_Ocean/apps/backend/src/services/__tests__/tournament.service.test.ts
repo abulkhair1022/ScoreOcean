@@ -813,6 +813,12 @@ describe('TournamentService', () => {
         rowCount: 1,
       } as any);
 
+      // Mock roster count query
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ player_count: '11' }],
+        rowCount: 1,
+      } as any);
+
       // Mock registration insert
       mockQuery.mockResolvedValueOnce({
         rows: [
@@ -969,6 +975,215 @@ describe('TournamentService', () => {
 
       await expect(tournamentService.registerTeam(tournamentId, teamId)).rejects.toThrow(
         'Team sport (FOOTBALL) does not match tournament sport (CRICKET)'
+      );
+    });
+
+    it('should reject registration if team roster is below minimum', async () => {
+      const tournamentId = 'tournament-123';
+      const teamId = 'team-123';
+
+      // Mock get tournament (CRICKET, with future deadline)
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: tournamentId,
+            status: TournamentStatus.REGISTRATION_OPEN,
+            name: 'Test',
+            sport: Sport.CRICKET,
+            format: TournamentFormat.LEAGUE,
+            host_id: 'user-123',
+            host_type: 'TEAM',
+            start_date: new Date('2026-06-01'),
+            end_date: new Date('2026-06-30'),
+            venue: 'Stadium',
+            registration_fee: 1000,
+            registration_deadline: new Date('2026-05-25'),
+            team_capacity: 8,
+            rules: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      // Mock team query (CRICKET team)
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ sport: Sport.CRICKET }],
+        rowCount: 1,
+      } as any);
+
+      // Mock roster count query (only 5 players, need 11 for cricket)
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ player_count: '5' }],
+        rowCount: 1,
+      } as any);
+
+      await expect(tournamentService.registerTeam(tournamentId, teamId)).rejects.toThrow(
+        'Team roster must have at least 11 players for CRICKET'
+      );
+    });
+
+    it('should auto-confirm registration for free tournaments', async () => {
+      const tournamentId = 'tournament-123';
+      const teamId = 'team-123';
+
+      // Mock get tournament (free tournament with registration_fee = 0)
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: tournamentId,
+            status: TournamentStatus.REGISTRATION_OPEN,
+            name: 'Test',
+            sport: Sport.CRICKET,
+            format: TournamentFormat.LEAGUE,
+            host_id: 'user-123',
+            host_type: 'TEAM',
+            start_date: new Date('2026-06-01'),
+            end_date: new Date('2026-06-30'),
+            venue: 'Stadium',
+            registration_fee: 0, // Free tournament
+            registration_deadline: new Date('2026-05-25'),
+            team_capacity: 8,
+            rules: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      // Mock team query
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ sport: Sport.CRICKET }],
+        rowCount: 1,
+      } as any);
+
+      // Mock roster count query
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ player_count: '11' }],
+        rowCount: 1,
+      } as any);
+
+      // Mock registration insert (status should be CONFIRMED)
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'registration-123',
+            tournament_id: tournamentId,
+            team_id: teamId,
+            status: RegistrationStatus.CONFIRMED,
+            registered_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      // Mock notification queries for sendRegistrationConfirmationNotification
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: tournamentId,
+            name: 'Test',
+            sport: Sport.CRICKET,
+            format: TournamentFormat.LEAGUE,
+            status: TournamentStatus.REGISTRATION_OPEN,
+            host_id: 'user-123',
+            host_type: 'TEAM',
+            start_date: new Date('2026-06-01'),
+            end_date: new Date('2026-06-30'),
+            venue: 'Stadium',
+            registration_fee: 0,
+            registration_deadline: new Date('2026-05-25'),
+            team_capacity: 8,
+            rules: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      // Mock team query for notification
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ host_id: 'user-123', name: 'Test Team' }],
+        rowCount: 1,
+      } as any);
+
+      // Mock notification insert for team host
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+
+      // Mock team members query
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ player_id: 'player-1' }, { player_id: 'player-2' }],
+        rowCount: 2,
+      } as any);
+
+      // Mock notification inserts for team members
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+
+      const registration = await tournamentService.registerTeam(tournamentId, teamId);
+
+      expect(registration.status).toBe(RegistrationStatus.CONFIRMED);
+    });
+
+    it('should reject duplicate registration', async () => {
+      const tournamentId = 'tournament-123';
+      const teamId = 'team-123';
+
+      // Mock get tournament with existing registration
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: tournamentId,
+            status: TournamentStatus.REGISTRATION_OPEN,
+            name: 'Test',
+            sport: Sport.CRICKET,
+            format: TournamentFormat.LEAGUE,
+            host_id: 'user-123',
+            host_type: 'TEAM',
+            start_date: new Date('2026-06-01'),
+            end_date: new Date('2026-06-30'),
+            venue: 'Stadium',
+            registration_fee: 1000,
+            registration_deadline: new Date('2026-05-25'),
+            team_capacity: 8,
+            rules: {},
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      // Mock registrations with existing registration for this team
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'reg-1',
+            tournament_id: tournamentId,
+            team_id: teamId,
+            status: RegistrationStatus.PENDING,
+            registered_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      } as any);
+
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      await expect(tournamentService.registerTeam(tournamentId, teamId)).rejects.toThrow(
+        'Team is already registered for this tournament'
       );
     });
   });

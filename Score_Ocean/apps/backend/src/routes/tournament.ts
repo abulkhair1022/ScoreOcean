@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { tournamentService } from '../services/tournament.service';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { pointsService } from '../services/points.service';
+import { authenticate, AuthRequest, requireResourceOwnership } from '../middleware/auth';
 
 const router = Router();
 
 // Get all tournaments
-router.get('/', authenticate, async (req: AuthRequest, res, next) => {
+router.get('/', authenticate, async (_req: AuthRequest, res, next) => {
   try {
     const tournaments = await tournamentService.getAllTournaments();
     res.json(tournaments);
@@ -38,65 +39,83 @@ router.get('/:id', authenticate, async (req: AuthRequest, res, next) => {
   }
 });
 
-// Update tournament
-router.put('/:id', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+// Update tournament - requires ownership
+router.put(
+  '/:id',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'tournament', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
 
-    const tournament = await tournamentService.updateTournament(id, updates);
-    res.json(tournament);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Delete tournament
-router.delete('/:id', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    await tournamentService.deleteTournament(id);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
-
-export default router;
-
-// Publish tournament
-router.post('/:id/publish', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    const tournament = await tournamentService.publishTournament(id);
-    res.json(tournament);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Update tournament status
-router.patch('/:id/status', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!status) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'status is required',
-        },
-      });
-      return;
+      const tournament = await tournamentService.updateTournament(id, updates);
+      res.json(tournament);
+    } catch (error) {
+      next(error);
     }
-
-    const tournament = await tournamentService.updateTournamentStatus(id, status);
-    res.json(tournament);
-  } catch (error) {
-    next(error);
   }
-});
+);
+
+// Delete tournament - requires ownership
+router.delete(
+  '/:id',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'tournament', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      await tournamentService.deleteTournament(id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Publish tournament - requires ownership
+router.post(
+  '/:id/publish',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'tournament', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      const tournament = await tournamentService.publishTournament(id);
+      res.json(tournament);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update tournament status - requires ownership
+router.patch(
+  '/:id/status',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'tournament', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'status is required',
+          },
+        });
+        return;
+      }
+
+      const tournament = await tournamentService.updateTournamentStatus(id, status);
+      res.json(tournament);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // Register team for tournament
 router.post('/:id/register', authenticate, async (req: AuthRequest, res, next) => {
@@ -127,6 +146,17 @@ router.get('/:id/registrations', authenticate, async (req: AuthRequest, res, nex
     const { id } = req.params;
     const registrations = await tournamentService.getRegistrations(id);
     res.json(registrations);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get points table for tournament
+router.get('/:id/points', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { id } = req.params;
+    const pointsTable = await pointsService.getPointsTable(id);
+    res.json(pointsTable);
   } catch (error) {
     next(error);
   }

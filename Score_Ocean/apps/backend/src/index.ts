@@ -1,10 +1,12 @@
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { connectRedis } from './db/redis';
 import { testConnection } from './db/postgres';
+import { websocketService } from './services/websocket.service';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import teamRoutes from './routes/team';
@@ -13,8 +15,11 @@ import matchRoutes from './routes/match';
 import auctionRoutes from './routes/auction';
 import notificationRoutes from './routes/notification';
 import paymentRoutes from './routes/payment';
+import searchRoutes from './routes/search';
+import certificateRoutes from './routes/certificate';
 
 const app = express();
+const httpServer = createServer(app);
 
 // Middleware
 app.use(helmet());
@@ -24,6 +29,10 @@ app.use(
     credentials: true,
   })
 );
+
+// Raw body for Stripe webhooks (must be before express.json())
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -53,6 +62,8 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/auctions', auctionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/certificates', certificateRoutes);
 
 // 404 handler
 app.use((_req, res) => {
@@ -98,13 +109,18 @@ async function startServer() {
       console.warn('  See SETUP.md for installation instructions');
     }
 
+    // Initialize WebSocket server
+    console.log('Initializing WebSocket server...');
+    await websocketService.initialize(httpServer);
+
     // Start server
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log('=================================');
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${config.nodeEnv}`);
       console.log(`✓ API Base URL: http://localhost:${PORT}/api`);
       console.log(`✓ Health Check: http://localhost:${PORT}/health`);
+      console.log(`✓ WebSocket URL: ws://localhost:${PORT}`);
       console.log('=================================');
       console.log('API Endpoints:');
       console.log(`  POST /api/auth/register - Register new user`);

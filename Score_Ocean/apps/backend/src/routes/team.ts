@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { teamService } from '../services/team.service';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import {
+  authenticate,
+  AuthRequest,
+  requireResourceOwnership,
+  requireTeamManagementPermission,
+  requireInvitationRecipient,
+} from '../middleware/auth';
 
 const router = Router();
 
@@ -39,29 +45,39 @@ router.get('/:id', authenticate, async (req: AuthRequest, res, next) => {
   }
 });
 
-// Update team
-router.put('/:id', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+// Update team - requires ownership
+router.put(
+  '/:id',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'team', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
 
-    const team = await teamService.updateTeam(id, updates);
-    res.json(team);
-  } catch (error) {
-    next(error);
+      const team = await teamService.updateTeam(id, updates);
+      res.json(team);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
-// Delete team
-router.delete('/:id', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id } = req.params;
-    await teamService.deleteTeam(id);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
+// Delete team - requires ownership
+router.delete(
+  '/:id',
+  authenticate,
+  requireResourceOwnership({ resourceType: 'team', resourceIdParam: 'id' }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id } = req.params;
+      await teamService.deleteTeam(id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get team roster
 router.get('/:id/roster', authenticate, async (req: AuthRequest, res, next) => {
@@ -86,29 +102,34 @@ router.get('/:id/roster/validate', authenticate, async (req: AuthRequest, res, n
   }
 });
 
-// Invite player to team
-router.post('/:id/invitations', authenticate, async (req: AuthRequest, res, next): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { playerId } = req.body;
-    const invitedBy = req.user!.userId;
+// Invite player to team - requires team management permission
+router.post(
+  '/:id/invitations',
+  authenticate,
+  requireTeamManagementPermission,
+  async (req: AuthRequest, res, next): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { playerId } = req.body;
+      const invitedBy = req.user!.userId;
 
-    if (!playerId) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'playerId is required',
-        },
-      });
-      return;
+      if (!playerId) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'playerId is required',
+          },
+        });
+        return;
+      }
+
+      const invitation = await teamService.invitePlayer(id, playerId, invitedBy);
+      res.status(201).json(invitation);
+    } catch (error) {
+      next(error);
     }
-
-    const invitation = await teamService.invitePlayer(id, playerId, invitedBy);
-    res.status(201).json(invitation);
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 // Get team invitations
 router.get('/:id/invitations', authenticate, async (req: AuthRequest, res, next) => {
@@ -121,31 +142,41 @@ router.get('/:id/invitations', authenticate, async (req: AuthRequest, res, next)
   }
 });
 
-// Accept invitation
-router.post('/invitations/:invitationId/accept', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { invitationId } = req.params;
-    const playerId = req.user!.userId;
+// Accept invitation - requires being the invited player
+router.post(
+  '/invitations/:invitationId/accept',
+  authenticate,
+  requireInvitationRecipient,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { invitationId } = req.params;
+      const playerId = req.user!.userId;
 
-    await teamService.acceptInvitation(invitationId, playerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
+      await teamService.acceptInvitation(invitationId, playerId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
-// Decline invitation
-router.post('/invitations/:invitationId/decline', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { invitationId } = req.params;
-    const playerId = req.user!.userId;
+// Decline invitation - requires being the invited player
+router.post(
+  '/invitations/:invitationId/decline',
+  authenticate,
+  requireInvitationRecipient,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { invitationId } = req.params;
+      const playerId = req.user!.userId;
 
-    await teamService.declineInvitation(invitationId, playerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
+      await teamService.declineInvitation(invitationId, playerId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get player's invitations
 router.get('/invitations/player/:playerId', authenticate, async (req: AuthRequest, res, next) => {
@@ -158,39 +189,49 @@ router.get('/invitations/player/:playerId', authenticate, async (req: AuthReques
   }
 });
 
-// Add player to roster
-router.post('/:id/roster', authenticate, async (req: AuthRequest, res, next): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { playerId } = req.body;
+// Add player to roster - requires team management permission
+router.post(
+  '/:id/roster',
+  authenticate,
+  requireTeamManagementPermission,
+  async (req: AuthRequest, res, next): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { playerId } = req.body;
 
-    if (!playerId) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'playerId is required',
-        },
-      });
-      return;
+      if (!playerId) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'playerId is required',
+          },
+        });
+        return;
+      }
+
+      await teamService.addPlayerToRoster(id, playerId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
     }
-
-    await teamService.addPlayerToRoster(id, playerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
   }
-});
+);
 
-// Remove player from roster
-router.delete('/:id/roster/:playerId', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const { id, playerId } = req.params;
-    await teamService.removePlayerFromRoster(id, playerId);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
+// Remove player from roster - requires team management permission
+router.delete(
+  '/:id/roster/:playerId',
+  authenticate,
+  requireTeamManagementPermission,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id, playerId } = req.params;
+      await teamService.removePlayerFromRoster(id, playerId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Validate roster for tournament registration
 router.get('/:id/roster/validate-tournament/:sport', authenticate, async (req: AuthRequest, res, next) => {
