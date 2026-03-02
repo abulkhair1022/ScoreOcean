@@ -161,36 +161,44 @@ export class SearchService {
    * Requirements: 11.2
    */
   async searchTeams(searchTerm: string, filters?: SearchFilters): Promise<SearchResult[]> {
-    const searchPattern = `%${searchTerm.toLowerCase()}%`;
+    // Handle wildcard search to get all teams
+    const isWildcard = searchTerm === '*' || searchTerm.trim().length === 0;
+    const searchPattern = isWildcard ? '%' : `%${searchTerm.toLowerCase()}%`;
     
-    let whereClause = `WHERE (
-      LOWER(t.name) LIKE $1 OR
-      LOWER(t.city) LIKE $1 OR
-      LOWER(t.state) LIKE $1 OR
-      LOWER(t.country) LIKE $1
-    )`;
+    let whereClause = '';
     
-    const params: any[] = [searchPattern];
-    let paramIndex = 2;
+    if (!isWildcard) {
+      whereClause = `WHERE (
+        LOWER(t.name) LIKE $1 OR
+        LOWER(t.city) LIKE $1 OR
+        LOWER(t.state) LIKE $1 OR
+        LOWER(t.country) LIKE $1
+      )`;
+    }
+    
+    const params: any[] = isWildcard ? [] : [searchPattern];
+    let paramIndex = isWildcard ? 1 : 2;
 
     // Apply sport filter
     if (filters?.sport) {
-      whereClause += ` AND t.sport = ${paramIndex++}`;
+      const connector = whereClause ? ' AND' : 'WHERE';
+      whereClause += `${connector} t.sport = $${paramIndex++}`;
       params.push(filters.sport);
     }
 
     // Apply location filter
     if (filters?.location) {
+      const connector = whereClause ? ' AND' : 'WHERE';
       if (filters.location.city) {
-        whereClause += ` AND LOWER(t.city) = ${paramIndex++}`;
+        whereClause += `${connector} LOWER(t.city) = $${paramIndex++}`;
         params.push(filters.location.city.toLowerCase());
       }
       if (filters.location.state) {
-        whereClause += ` AND LOWER(t.state) = ${paramIndex++}`;
+        whereClause += ` AND LOWER(t.state) = $${paramIndex++}`;
         params.push(filters.location.state.toLowerCase());
       }
       if (filters.location.country) {
-        whereClause += ` AND LOWER(t.country) = ${paramIndex++}`;
+        whereClause += ` AND LOWER(t.country) = $${paramIndex++}`;
         params.push(filters.location.country.toLowerCase());
       }
     }
@@ -207,12 +215,13 @@ export class SearchService {
         (SELECT COUNT(*) FROM team_rosters tr WHERE tr.team_id = t.id) as roster_count
       FROM teams t
       ${whereClause}
+      ORDER BY t.created_at DESC
       LIMIT 100`,
       params
     );
 
     return result.rows.map((row) => {
-      const relevanceScore = this.calculateRelevanceScore(
+      const relevanceScore = isWildcard ? 50 : this.calculateRelevanceScore(
         searchTerm,
         [row.name, row.city, row.state, row.country]
       );

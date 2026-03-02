@@ -57,7 +57,7 @@ export class UserService {
     );
     if (userResult.rows.length === 0) { throw new Error('User not found'); }
     const row = userResult.rows[0];
-    const sportProfilesResult = await query(`SELECT id, sport, statistics, created_at, updated_at FROM sport_profiles WHERE user_id = $1`, [userId]);
+    const sportProfilesResult = await query(`SELECT id, sport, statistics, base_price, created_at, updated_at FROM sport_profiles WHERE user_id = $1`, [userId]);
     const sportProfiles = sportProfilesResult.rows.map((sp) => ({ id: sp.id, sport: sp.sport, statistics: sp.statistics, matchHistory: [] }));
     return {
       id: row.id, email: row.email, role: row.role as UserRole,
@@ -81,12 +81,22 @@ export class UserService {
     return { id: row.id, sport: row.sport, statistics: row.statistics, matchHistory: [] };
   }
 
-  async updateSportProfile(userId: string, sportId: string, stats: SportStats): Promise<SportProfile> {
+  async updateSportProfile(userId: string, sportId: string, data: any): Promise<SportProfile> {
     const verifyResult = await query(`SELECT sport FROM sport_profiles WHERE id = $1 AND user_id = $2`, [sportId, userId]);
     if (verifyResult.rows.length === 0) { throw new Error('Sport profile not found or does not belong to user'); }
-    const result = await query(`UPDATE sport_profiles SET statistics = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *`, [JSON.stringify(stats), sportId, userId]);
+    // Separate base_price from stats
+    const { base_price, ...stats } = data;
+    const result = await query(
+      `UPDATE sport_profiles
+       SET statistics = $1,
+           base_price = CASE WHEN $2::text IS NULL THEN base_price ELSE $2::numeric END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [JSON.stringify(stats), base_price != null ? String(base_price) : null, sportId, userId]
+    );
     const row = result.rows[0];
-    return { id: row.id, sport: row.sport, statistics: row.statistics, matchHistory: [] };
+    return { id: row.id, sport: row.sport, statistics: row.statistics, basePrice: row.base_price ? parseFloat(row.base_price) : null, matchHistory: [] };
   }
 
   async getPerformanceStats(userId: string, filters: StatsFilter): Promise<PerformanceStats> {

@@ -5,6 +5,7 @@ import {
   TournamentFormat,
   TournamentStatus,
   Registration,
+  PlayerRegistration,
   RegistrationStatus,
   Fixture,
   FixtureUpdate,
@@ -13,14 +14,26 @@ import { AppError } from '../middleware/errorHandler';
 
 export class TournamentService {
   /**
-   * Get all tournaments (published ones)
+   * Get all tournaments
+   * For public view: only published tournaments
+   * For user's own tournaments: include drafts
    */
-  async getAllTournaments(): Promise<Tournament[]> {
-    const result = await query(
-      `SELECT * FROM tournaments 
-       WHERE status != 'DRAFT' 
-       ORDER BY start_date DESC, created_at DESC`
-    );
+  async getAllTournaments(userId?: string, includeDrafts: boolean = false): Promise<Tournament[]> {
+    let queryText = `SELECT * FROM tournaments`;
+    
+    if (includeDrafts && userId) {
+      // Show all tournaments for the user (including their drafts)
+      queryText += ` WHERE status != 'DRAFT' OR host_id = $1`;
+    } else {
+      // Public view: only show published tournaments
+      queryText += ` WHERE status != 'DRAFT'`;
+    }
+    
+    queryText += ` ORDER BY start_date DESC, created_at DESC`;
+    
+    const result = includeDrafts && userId 
+      ? await query(queryText, [userId])
+      : await query(queryText);
 
     const tournaments = await Promise.all(
       result.rows.map((row) => this.mapRowToTournament(row))
@@ -82,8 +95,8 @@ export class TournamentService {
     }
 
     // Validate team capacity
-    if (teamCapacity < 2 || teamCapacity > 100) {
-      throw new AppError('Team capacity must be between 2 and 100', 400);
+    if (teamCapacity < 2 || teamCapacity > 1000) {
+      throw new AppError('Team capacity must be between 2 and 1000', 400);
     }
 
     // Validate registration fee
@@ -115,16 +128,17 @@ export class TournamentService {
     // Create tournament
     const result = await query(
       `INSERT INTO tournaments (
-        name, sport, format, host_id, host_type,
+        name, sport, format, competition_type, host_id, host_type,
         start_date, end_date, venue,
         registration_fee, registration_deadline, team_capacity,
         status, rules
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         name.trim(),
         sport,
         format,
+        tournamentData.competitionType || 'TOURNAMENT',
         hostId,
         hostType,
         startDate,
@@ -165,9 +179,27 @@ export class TournamentService {
     // Get existing tournament
     const existing = await this.getTournament(tournamentId);
 
-    // Only allow updates if tournament is in DRAFT status
-    if (existing.status !== TournamentStatus.DRAFT) {
-      throw new AppError('Can only update tournaments in DRAFT status', 400);
+    // Allow updates for DRAFT and REGISTRATION_OPEN status
+    // For REGISTRATION_OPEN, restrict certain fields
+    const allowedStatuses = [TournamentStatus.DRAFT, TournamentStatus.REGISTRATION_OPEN];
+    if (!allowedStatuses.includes(existing.status)) {
+      throw new AppError('Can only update tournaments in DRAFT or REGISTRATION_OPEN status', 400);
+    }
+
+    // If tournament is REGISTRATION_OPEN, restrict certain critical fields
+    const isRegistrationOpen = existing.status === TournamentStatus.REGISTRATION_OPEN;
+    if (isRegistrationOpen) {
+      // Don't allow changing sport or format after registration opens
+      if (updates.sport !== undefined && updates.sport !== existing.sport) {
+        throw new AppError('Cannot change sport after registration has opened', 400);
+      }
+      if (updates.format !== undefined && updates.format !== existing.format) {
+        throw new AppError('Cannot change format after registration has opened', 400);
+      }
+      // Don't allow reducing capacity below current registrations
+      if (updates.teamCapacity !== undefined && updates.teamCapacity < existing.registrations.length) {
+        throw new AppError(`Cannot reduce capacity below current registrations (${existing.registrations.length})`, 400);
+      }
     }
 
     const fields: string[] = [];
@@ -241,8 +273,8 @@ export class TournamentService {
     }
 
     if (updates.teamCapacity !== undefined) {
-      if (updates.teamCapacity < 2 || updates.teamCapacity > 100) {
-        throw new AppError('Team capacity must be between 2 and 100', 400);
+      if (updates.teamCapacity < 2 || updates.teamCapacity > 1000) {
+        throw new AppError('Team capacity must be between 2 and 1000', 400);
       }
       fields.push(`team_capacity = $${paramIndex++}`);
       values.push(updates.teamCapacity);
@@ -283,20 +315,47 @@ export class TournamentService {
    * Map database row to Tournament object
    */
   private async mapRowToTournament(row: any): Promise<Tournament> {
-    // Get registrations
+    // Get registrations with player/team information
     const registrationsResult = await query(
-      'SELECT * FROM tournament_registrations WHERE tournament_id = $1 ORDER BY registered_at ASC',
+      `SELECT 
+        tr.*,
+        u.email as player_email,
+        up.name as player_name,
+        t.name as team_name
+      FROM tournament_registrations tr
+      LEFT JOIN users u ON tr.player_id = u.id
+      LEFT JOIN user_profiles up ON u.id = up.user_id
+      LEFT JOIN teams t ON tr.team_id = t.id
+      WHERE tr.tournament_id = $1 
+      ORDER BY tr.registered_at ASC`,
       [row.id]
     );
 
-    const registrations: Registration[] = registrationsResult.rows.map((r) => ({
-      id: r.id,
-      tournamentId: r.tournament_id,
-      teamId: r.team_id,
-      status: r.status as RegistrationStatus,
-      paymentId: r.payment_id,
-      registeredAt: r.registered_at,
-    }));
+    const registrations: (Registration | PlayerRegistration)[] = registrationsResult.rows.map((r) => {
+      // Return PlayerRegistration if player_id exists, otherwise Registration
+      if (r.player_id) {
+        return {
+          id: r.id,
+          tournamentId: r.tournament_id,
+          playerId: r.player_id,
+          playerName: r.player_name || r.player_email,
+          playerDetails: r.player_details, // Include player details from registration
+          status: r.status as RegistrationStatus,
+          paymentId: r.payment_id,
+          registeredAt: r.registered_at,
+        } as any;
+      } else {
+        return {
+          id: r.id,
+          tournamentId: r.tournament_id,
+          teamId: r.team_id,
+          teamName: r.team_name,
+          status: r.status as RegistrationStatus,
+          paymentId: r.payment_id,
+          registeredAt: r.registered_at,
+        } as any;
+      }
+    });
 
     // Get fixtures
     const fixturesResult = await query(
@@ -321,6 +380,7 @@ export class TournamentService {
       name: row.name,
       sport: row.sport,
       format: row.format as TournamentFormat,
+      competitionType: row.competition_type || 'TOURNAMENT',
       hostId: row.host_id,
       hostType: row.host_type,
       dates: {
@@ -362,8 +422,8 @@ export class TournamentService {
       [TournamentStatus.REGISTRATION_OPEN, tournamentId]
     );
 
-    // Send notifications to all users (simplified - will be enhanced with notification service)
-    // In a real implementation, this would notify users based on their preferences and location
+    // Send notifications to all potential participants
+    await this.sendStatusChangeNotifications(tournamentId, TournamentStatus.REGISTRATION_OPEN);
 
     return this.getTournament(tournamentId);
   }
@@ -493,11 +553,10 @@ export class TournamentService {
     }
 
     // Create registration
-    // If registration fee is 0, automatically confirm registration
-    // Otherwise, registration stays pending until payment is completed
-    const status = tournament.registrationFee === 0 
-      ? RegistrationStatus.CONFIRMED 
-      : RegistrationStatus.PENDING;
+    // Set to PENDING status - will be confirmed after payment
+    const status = tournament.registrationFee > 0 
+      ? RegistrationStatus.PENDING 
+      : RegistrationStatus.CONFIRMED;
 
     const result = await query(
       `INSERT INTO tournament_registrations (tournament_id, team_id, status)
@@ -508,7 +567,7 @@ export class TournamentService {
 
     const registration = result.rows[0];
 
-    // If registration is confirmed (free tournament), send notification
+    // Only send confirmation if no payment required
     if (status === RegistrationStatus.CONFIRMED) {
       await this.sendRegistrationConfirmationNotification(teamId, tournamentId);
     }
@@ -534,6 +593,103 @@ export class TournamentService {
       VOLLEYBALL: 6,
     };
     return minimums[sport] || 1;
+  }
+
+  /**
+   * Register individual player for league
+   * Creates a registration record for player-based leagues
+   */
+  async registerPlayer(
+    tournamentId: string, 
+    playerId: string, 
+    playerDetails?: any
+  ): Promise<PlayerRegistration> {
+    const tournament = await this.getTournament(tournamentId);
+
+    // Enforce registration deadline
+    const now = new Date();
+    const deadline = new Date(tournament.registrationDeadline);
+
+    if (now >= deadline) {
+      throw new AppError('Registration deadline has passed', 400);
+    }
+
+    // Check if registration is open
+    if (tournament.status !== TournamentStatus.REGISTRATION_OPEN) {
+      throw new AppError('Tournament registration is not open', 400);
+    }
+
+    // Enforce player capacity
+    const confirmedRegistrations = tournament.registrations.filter(
+      (r) => r.status === RegistrationStatus.CONFIRMED
+    );
+
+    if (confirmedRegistrations.length >= tournament.teamCapacity) {
+      throw new AppError('League is at full capacity', 400);
+    }
+
+    // Check if player is already registered
+    const existingRegistration = await query(
+      'SELECT * FROM tournament_registrations WHERE tournament_id = $1 AND player_id = $2',
+      [tournamentId, playerId]
+    );
+    
+    if (existingRegistration.rows.length > 0) {
+      throw new AppError('You are already registered for this league', 400);
+    }
+
+    // Validate player exists and role is PLAYER
+    const playerResult = await query(
+      'SELECT role FROM users WHERE id = $1',
+      [playerId]
+    );
+    
+    if (playerResult.rows.length === 0) {
+      throw new AppError('Player not found', 404);
+    }
+
+    if (playerResult.rows[0].role !== 'PLAYER') {
+      throw new AppError('Only players can register for leagues', 400);
+    }
+
+    // Create registration
+    // Set to PENDING status - will be confirmed after payment
+    const status = tournament.registrationFee > 0 
+      ? RegistrationStatus.PENDING 
+      : RegistrationStatus.CONFIRMED;
+
+    const result = await query(
+      `INSERT INTO tournament_registrations (tournament_id, player_id, status, player_details)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [tournamentId, playerId, status, JSON.stringify(playerDetails || {})]
+    );
+
+    const registration = result.rows[0];
+
+    // Only send confirmation if no payment required
+    if (status === RegistrationStatus.CONFIRMED) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message, data)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          playerId,
+          'TOURNAMENT_REGISTRATION',
+          'League Registration Confirmed',
+          `You have successfully registered for ${tournament.name}. Teams will be formed after the auction.`,
+          JSON.stringify({ tournamentId, registrationId: registration.id })
+        ]
+      );
+    }
+
+    return {
+      id: registration.id,
+      tournamentId: registration.tournament_id,
+      playerId: registration.player_id,
+      status: registration.status as RegistrationStatus,
+      paymentId: registration.payment_id,
+      registeredAt: registration.registered_at,
+    };
   }
 
   /**
@@ -606,39 +762,144 @@ export class TournamentService {
   }
 
   /**
-   * Send status change notifications (simplified)
+   * Send status change notifications
    */
   private async sendStatusChangeNotifications(
     tournamentId: string,
     newStatus: TournamentStatus
   ): Promise<void> {
     const tournament = await this.getTournament(tournamentId);
+
+    // When tournament is published (REGISTRATION_OPEN), notify all potential participants
+    if (newStatus === TournamentStatus.REGISTRATION_OPEN) {
+      await this.notifyTournamentPublished(tournament);
+      return;
+    }
+
+    // For other status changes, notify registered participants only
     const registrations = await this.getRegistrations(tournamentId);
+    if (registrations.length === 0) return;
 
-    // Get all team hosts
-    const teamIds = registrations.map((r) => r.teamId);
-    if (teamIds.length === 0) return;
+    // For leagues, notify players directly
+    if (tournament.format === TournamentFormat.LEAGUE) {
+      const playerIds = registrations
+        .map((r: any) => r.playerId)
+        .filter((id: string) => id);
 
-    const teamsResult = await query(
-      `SELECT host_id FROM teams WHERE id = ANY($1)`,
-      [teamIds]
-    );
+      for (const playerId of playerIds) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, channels, data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            playerId,
+            'TOURNAMENT_UPDATE',
+            'Tournament Status Update',
+            `Tournament "${tournament.name}" status changed to ${newStatus.replace(/_/g, ' ')}`,
+            ['IN_APP', 'EMAIL'],
+            JSON.stringify({ tournamentId: tournament.id }),
+          ]
+        );
+      }
+    } else {
+      // For tournaments, notify team hosts
+      const teamIds = registrations.map((r) => r.teamId).filter((id) => id);
+      if (teamIds.length === 0) return;
 
-    const hostIds = teamsResult.rows.map((t) => t.host_id);
-
-    // Send notification to each host
-    for (const hostId of hostIds) {
-      await query(
-        `INSERT INTO notifications (user_id, type, title, message, channels)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          hostId,
-          'TOURNAMENT_UPDATE',
-          'Tournament Status Update',
-          `Tournament "${tournament.name}" status changed to ${newStatus}`,
-          ['IN_APP', 'EMAIL'],
-        ]
+      const teamsResult = await query(
+        `SELECT host_id FROM teams WHERE id = ANY($1)`,
+        [teamIds]
       );
+
+      const hostIds = teamsResult.rows.map((t) => t.host_id);
+
+      for (const hostId of hostIds) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, channels, data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            hostId,
+            'TOURNAMENT_UPDATE',
+            'Tournament Status Update',
+            `Tournament "${tournament.name}" status changed to ${newStatus.replace(/_/g, ' ')}`,
+            ['IN_APP', 'EMAIL'],
+            JSON.stringify({ tournamentId: tournament.id }),
+          ]
+        );
+      }
+    }
+  }
+
+  /**
+   * Notify all users when a tournament is published
+   */
+  private async notifyTournamentPublished(tournament: Tournament): Promise<void> {
+    console.log(`[NOTIFICATION] Publishing tournament: ${tournament.name} (${tournament.format})`);
+    
+    const isLeague = tournament.format === TournamentFormat.LEAGUE;
+    
+    if (isLeague) {
+      // For leagues, notify all players
+      const playersResult = await query(
+        `SELECT id FROM users WHERE role = 'PLAYER'`
+      );
+
+      console.log(`[NOTIFICATION] Found ${playersResult.rows.length} players to notify`);
+
+      const message = `New league "${tournament.name}" is now open for registration! Sport: ${tournament.sport}, Fee: ₹${tournament.registrationFee}`;
+
+      for (const player of playersResult.rows) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, channels, data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            player.id,
+            'NEW_TOURNAMENT',
+            `New ${tournament.sport} League Open!`,
+            message,
+            ['IN_APP', 'EMAIL'],
+            JSON.stringify({ 
+              tournamentId: tournament.id,
+              sport: tournament.sport,
+              format: tournament.format,
+              registrationFee: tournament.registrationFee
+            }),
+          ]
+        );
+      }
+      
+      console.log(`[NOTIFICATION] Created ${playersResult.rows.length} notifications for league`);
+    } else {
+      // For tournaments, notify all team hosts/captains of matching sport
+      const teamsResult = await query(
+        `SELECT DISTINCT host_id FROM teams WHERE sport = $1`,
+        [tournament.sport]
+      );
+
+      console.log(`[NOTIFICATION] Found ${teamsResult.rows.length} team hosts to notify for ${tournament.sport}`);
+
+      const message = `New tournament "${tournament.name}" is now open for registration! Sport: ${tournament.sport}, Fee: ₹${tournament.registrationFee}`;
+
+      for (const team of teamsResult.rows) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, channels, data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            team.host_id,
+            'NEW_TOURNAMENT',
+            `New ${tournament.sport} Tournament Open!`,
+            message,
+            ['IN_APP', 'EMAIL'],
+            JSON.stringify({ 
+              tournamentId: tournament.id,
+              sport: tournament.sport,
+              format: tournament.format,
+              registrationFee: tournament.registrationFee
+            }),
+          ]
+        );
+      }
+      
+      console.log(`[NOTIFICATION] Created ${teamsResult.rows.length} notifications for tournament`);
     }
   }
 

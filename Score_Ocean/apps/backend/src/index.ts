@@ -17,6 +17,9 @@ import notificationRoutes from './routes/notification';
 import paymentRoutes from './routes/payment';
 import searchRoutes from './routes/search';
 import certificateRoutes from './routes/certificate';
+import matchChallengeRoutes from './routes/matchChallenge';
+import cricketStatsRoutes from './routes/cricketStats';
+import leagueAuctionRoutes from './routes/leagueAuction';
 
 const app = express();
 const httpServer = createServer(app);
@@ -33,8 +36,9 @@ app.use(
 // Raw body for Stripe webhooks (must be before express.json())
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body size limit to handle base64 images (10MB)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging middleware
 app.use((req, _res, next) => {
@@ -59,11 +63,14 @@ app.use('/api/users', userRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/matches', matchRoutes);
+app.use('/api/match-challenges', matchChallengeRoutes);
 app.use('/api/auctions', auctionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/cricket-stats', cricketStatsRoutes);
+app.use('/api/league-auctions', leagueAuctionRoutes);
 
 // 404 handler
 app.use((_req, res) => {

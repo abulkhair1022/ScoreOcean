@@ -42,8 +42,9 @@ function NotificationCenter() {
     try {
       setLoading(true);
       const response = await apiClient.get('/notifications');
-      setNotifications(response.data);
-      setUnreadCount(response.data.filter((n: any) => !n.read).length);
+      const list = Array.isArray(response.data) ? response.data : (response.data.data || []);
+      setNotifications(list);
+      setUnreadCount(list.filter((n: any) => !n.read).length);
     } catch (err: any) {
       console.error('Failed to load notifications:', err);
     } finally {

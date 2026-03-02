@@ -34,23 +34,53 @@ router.post('/initiate', authenticate, async (req: AuthRequest, res: Response, n
 });
 
 /**
- * Handle Stripe webhook events
+ * Handle Razorpay webhook events
  * POST /api/payments/webhook
  */
 router.post('/webhook', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const signature = req.headers['stripe-signature'];
+    const signature = req.headers['x-razorpay-signature'];
 
     if (!signature || typeof signature !== 'string') {
-      throw new AppError('Missing Stripe signature.', 400);
+      throw new AppError('Missing Razorpay signature.', 400);
     }
 
-    // Get raw body for signature verification
+    // Razorpay sends JSON payload
     const payload = req.body;
 
     await paymentService.handleWebhook(payload, signature);
 
     res.status(200).json({ received: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Verify payment after successful payment on frontend
+ * POST /api/payments/verify
+ */
+router.post('/verify', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { orderId, paymentId, signature } = req.body;
+
+    if (!orderId || !paymentId || !signature) {
+      throw new AppError('Order ID, Payment ID, and signature are required.', 400);
+    }
+
+    const isValid = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
+
+    if (!isValid) {
+      throw new AppError('Invalid payment signature.', 400);
+    }
+
+    // Update payment status to completed (simulate webhook behavior for local dev)
+    await paymentService.completePayment(orderId, paymentId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment verified successfully',
+    });
   } catch (error) {
     next(error);
   }

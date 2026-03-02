@@ -2,44 +2,70 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/client';
 
-interface OrgStats {
-  totalTournaments: number;
-  activeTournaments: number;
-  totalRegistrations: number;
-  totalRevenue: number;
-}
+const SPORT_ICON: Record<string, string> = {
+  CRICKET: '🏏', FOOTBALL: '⚽', KABADDI: '🤼', VOLLEYBALL: '🏐',
+};
+
+const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  ACTIVE:               { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Active'               },
+  UPCOMING:             { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500',    label: 'Upcoming'             },
+  REGISTRATION_OPEN:    { bg: 'bg-violet-100',  text: 'text-violet-700',  dot: 'bg-violet-500',  label: 'Registration Open'    },
+  REGISTRATION_CLOSED:  { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500',   label: 'Registration Closed'  },
+  ONGOING:              { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Ongoing'              },
+  COMPLETED:            { bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400',    label: 'Completed'            },
+  CANCELLED:            { bg: 'bg-rose-100',    text: 'text-rose-700',    dot: 'bg-rose-500',    label: 'Cancelled'            },
+  DRAFT:                { bg: 'bg-gray-100',    text: 'text-gray-500',    dot: 'bg-gray-400',    label: 'Draft'                },
+};
+
+const getEffectiveStatusKey = (t: any): string => {
+  const dbStatus = t.status || 'UPCOMING';
+  const now = new Date();
+  const startDate   = t.dates?.startDate   || t.startDate;
+  const endDate     = t.dates?.endDate     || t.endDate;
+  const regDeadline = t.dates?.registrationDeadline || t.registrationDeadline;
+  if (dbStatus === 'CANCELLED' || dbStatus === 'DRAFT') return dbStatus;
+  if (endDate     && now > new Date(endDate))     return 'COMPLETED';
+  if (startDate   && now >= new Date(startDate))  return 'ONGOING';
+  if (regDeadline && now > new Date(regDeadline)) return 'REGISTRATION_CLOSED';
+  return dbStatus;
+};
+
+const QUICK_ACTIONS = [
+  { to: '/tournaments', icon: '🏆', label: 'Create Tournament',    desc: 'Host a new event',           gradient: 'from-violet-400 to-purple-500' },
+  { to: '/tournaments', icon: '👥', label: 'Manage Teams',         desc: 'View registrations',         gradient: 'from-blue-400 to-indigo-500'   },
+  { to: '/tournaments', icon: '📊', label: 'View Analytics',       desc: 'Stats & insights',           gradient: 'from-amber-400 to-orange-500'  },
+  { to: '/profile',     icon: '⚙️', label: 'Organization Profile', desc: 'Update org details',         gradient: 'from-gray-400 to-slate-500'    },
+];
 
 export default function OrganizationDashboard() {
-  const [stats, setStats] = useState<OrgStats | null>(null);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [profileName, setProfileName] = useState('');
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) setUser(JSON.parse(storedUser));
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
-      
-      // Fetch tournaments hosted by this organization
-      const tournamentsResponse = await apiClient.get('/tournaments');
-      const tournamentsData = tournamentsResponse.data.data || [];
-      setTournaments(tournamentsData);
-      
-      // Calculate stats
-      const activeTournaments = tournamentsData.filter((t: any) => 
-        ['REGISTRATION_OPEN', 'IN_PROGRESS'].includes(t.status)
-      ).length;
-      
-      setStats({
-        totalTournaments: tournamentsData.length,
-        activeTournaments,
-        totalRegistrations: 0,
-        totalRevenue: 0,
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      const [tournamentsRes, profileRes] = await Promise.allSettled([
+        apiClient.get('/tournaments'),
+        apiClient.get('/users/profile'),
+      ]);
+
+      if (tournamentsRes.status === 'fulfilled') {
+        const list = tournamentsRes.value.data?.data || tournamentsRes.value.data || [];
+        setTournaments(Array.isArray(list) ? list : []);
+      }
+      if (profileRes.status === 'fulfilled') {
+        const pName = profileRes.value.data?.profile?.name || profileRes.value.data?.name || '';
+        if (pName) setProfileName(pName);
+      }
+    } catch (err) {
+      console.error('Dashboard error:', err);
     } finally {
       setLoading(false);
     }
@@ -47,202 +73,164 @@ export default function OrganizationDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      <div className="flex items-center justify-center min-h-[500px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-violet-200 border-t-violet-600 animate-spin" />
+          <p className="text-gray-500 text-sm">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
+  const activeTournaments  = tournaments.filter((t: any) =>
+    ['ACTIVE', 'IN_PROGRESS', 'REGISTRATION_OPEN', 'FIXTURES_PUBLISHED'].includes(t.status)
+  ).length;
+  const totalRegistrations = tournaments.reduce((s: number, t: any) =>
+    s + (t.registrations?.length || t.currentTeams || 0), 0);
+  const totalRevenue       = tournaments.reduce((s: number, t: any) =>
+    s + (t.registrationFee || 0) * (t.registrations?.length || t.currentTeams || 0), 0);
+  const name = profileName || user?.name || user?.email?.split('@')[0] || 'Organization';
+  const myTournaments = tournaments.filter((t: any) =>
+    t.host_id === user?.id || t.hostId === user?.id
+  );
+  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening';
+
   return (
-    <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl shadow-lg p-8 text-white">
-        <h1 className="text-3xl font-bold mb-2">Organization Dashboard</h1>
-        <p className="text-purple-100">Manage tournaments, registrations, and analytics</p>
-      </div>
+    <div className="space-y-6 animate-fade-in">
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Tournaments</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalTournaments || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
-          </div>
+      {/* Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-700 p-8 text-white">
+        <div className="absolute inset-0">
+          <div className="absolute w-64 h-64 rounded-full opacity-10 bg-white -top-16 -right-16 animate-float" />
+          <div className="absolute w-40 h-40 rounded-full opacity-10 bg-white bottom-0 left-1/4 animate-float-delay" />
+          <div className="absolute inset-0 opacity-[0.05]"
+            style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Active Tournaments</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.activeTournaments || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div>
+            <p className="text-violet-200 text-sm font-medium mb-1">{greeting} 👋</p>
+            <h1 className="text-3xl md:text-4xl font-black mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>{name}</h1>
+            <p className="text-violet-100 max-w-md">Host tournaments, manage registrations, and grow the sports ecosystem.</p>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Registrations</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalRegistrations || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">₹{stats?.totalRevenue || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+          <div className="flex gap-3 flex-wrap">
+            <Link to="/tournaments"
+              className="px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/25 text-white rounded-xl text-sm font-semibold transition-all hover:scale-105">
+              View Tournaments
+            </Link>
+            <Link to="/tournaments"
+              className="px-5 py-2.5 bg-white text-violet-700 rounded-xl text-sm font-bold hover:bg-violet-50 transition-all hover:scale-105 shadow-lg">
+              + Create Event
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* My Tournaments */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">My Tournaments</h2>
-          <Link
-            to="/tournaments"
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-          >
-            Create Tournament
-          </Link>
-        </div>
-        
-        {tournaments.length > 0 ? (
-          <div className="space-y-4">
-            {tournaments.slice(0, 5).map((tournament: any) => (
-              <div key={tournament.id} className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="font-semibold text-gray-900 text-lg">{tournament.name}</h3>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        tournament.status === 'REGISTRATION_OPEN' ? 'bg-green-100 text-green-800' :
-                        tournament.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                        tournament.status === 'COMPLETED' ? 'bg-gray-100 text-gray-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {tournament.status?.replace('_', ' ')}
-                      </span>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { icon: '🏆', label: 'Total Tournaments',  value: tournaments.length,   gradient: 'from-violet-500 to-purple-600',  text: 'text-violet-600' },
+          { icon: '⚡', label: 'Active Events',       value: activeTournaments,    gradient: 'from-emerald-500 to-teal-600',   text: 'text-emerald-600' },
+          { icon: '📝', label: 'Registrations',       value: totalRegistrations,   gradient: 'from-blue-500 to-indigo-600',    text: 'text-blue-600' },
+          { icon: '💰', label: 'Total Revenue',        value: `₹${(totalRevenue/1000).toFixed(1)}K`, gradient: 'from-amber-500 to-orange-600', text: 'text-amber-600' },
+        ].map((s) => (
+          <div key={s.label} className="card-hover p-6">
+            <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center text-xl mb-4 shadow-sm`}>
+              {s.icon}
+            </div>
+            <div className={`text-3xl font-black ${s.text} mb-1`}>{s.value}</div>
+            <div className="text-sm text-gray-500 font-medium">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Tournaments List */}
+        <div className="lg:col-span-2 card p-6">
+          <div className="section-header">
+            <h2 className="section-title flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">🏆</span>
+              My Tournaments
+            </h2>
+            <Link to="/tournaments"
+              className="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl text-sm font-bold hover:from-violet-700 hover:to-purple-700 transition-all shadow-sm">
+              + Create New
+            </Link>
+          </div>
+
+          {tournaments.length > 0 ? (
+            <div className="space-y-3">
+              {(myTournaments.length > 0 ? myTournaments : tournaments).slice(0, 6).map((t: any) => {
+                const statusKey = getEffectiveStatusKey(t);
+                const s = STATUS_STYLE[statusKey] || STATUS_STYLE.UPCOMING;
+                const regs = t.registrations?.length || t.currentTeams || 0;
+                const cap  = t.teamCapacity || t.maxTeams || '—';
+                const startDate = t.dates?.startDate || t.startDate;
+                return (
+                  <div key={t.id}
+                    className="flex items-center gap-4 p-4 rounded-2xl border-2 border-transparent hover:border-violet-200 bg-gray-50 hover:bg-white transition-all hover:shadow-card">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-xl shadow-sm flex-shrink-0">
+                      {SPORT_ICON[t.sport] || '🏆'}
                     </div>
-                    <div className="flex items-center space-x-6 text-sm text-gray-600">
-                      <span className="flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {new Date(tournament.startDate).toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        {tournament.sport}
-                      </span>
-                      <span className="flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        0 / {tournament.maxTeams} teams
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-gray-900 truncate">{t.name}</p>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${s.bg} ${s.text} text-xs font-semibold`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                          {s.label}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {t.sport} · {regs}/{cap} teams
+                        {startDate ? ` · ${new Date(startDate).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}` : ''}
+                      </p>
                     </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Link
-                      to={`/tournaments/${tournament.id}`}
-                      className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium"
-                    >
+                    <Link to={`/tournaments/${t.id}/manage`}
+                      className="px-4 py-2 bg-violet-50 text-violet-700 text-sm font-bold rounded-xl hover:bg-violet-100 transition-colors flex-shrink-0">
                       Manage
                     </Link>
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl mb-4">🏆</div>
+              <p className="font-semibold text-gray-700 mb-1">No tournaments yet</p>
+              <p className="text-sm text-gray-400 mb-4">Create your first tournament to start accepting registrations</p>
+              <Link to="/tournaments"
+                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-bold rounded-xl hover:from-violet-700 transition-all shadow-sm">
+                Create Tournament
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="card p-6">
+          <div className="section-header">
+            <h2 className="section-title flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-ocean-100 flex items-center justify-center">⚡</span>
+              Quick Actions
+            </h2>
+          </div>
+          <div className="space-y-3">
+            {QUICK_ACTIONS.map((action) => (
+              <Link key={action.label} to={action.to}
+                className="group flex items-center gap-3 p-3.5 rounded-2xl border-2 border-transparent hover:border-gray-200 bg-gray-50 hover:bg-white hover:shadow-card transition-all duration-200">
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${action.gradient} flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-200 flex-shrink-0`}>
+                  <span className="text-base">{action.icon}</span>
                 </div>
-              </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{action.label}</p>
+                  <p className="text-xs text-gray-400">{action.desc}</p>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-gray-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
-            <p className="text-gray-500 mb-4">No tournaments yet. Create your first tournament to get started!</p>
-            <Link
-              to="/tournaments"
-              className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-            >
-              Create Tournament
-            </Link>
-          </div>
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link to="/tournaments" className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">New Tournament</h3>
-              <p className="text-sm text-gray-600">Create and configure</p>
-            </div>
-          </div>
-        </Link>
-
-        <button className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow text-left">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Registrations</h3>
-              <p className="text-sm text-gray-600">Manage entries</p>
-            </div>
-          </div>
-        </button>
-
-        <button className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow text-left">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Analytics</h3>
-              <p className="text-sm text-gray-600">View insights</p>
-            </div>
-          </div>
-        </button>
+        </div>
       </div>
     </div>
   );

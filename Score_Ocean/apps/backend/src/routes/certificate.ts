@@ -81,40 +81,6 @@ router.get(
 );
 
 /**
- * Get a specific certificate
- * GET /api/certificates/:certificateId
- */
-router.get('/:certificateId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { certificateId } = req.params;
-
-    const certificate = await certificateService.getCertificate(certificateId);
-
-    if (!certificate) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Certificate not found',
-        },
-      });
-      return;
-    }
-
-    res.json({
-      certificate,
-    });
-  } catch (error: any) {
-    console.error('Error fetching certificate:', error);
-    res.status(500).json({
-      error: {
-        code: 'FETCH_FAILED',
-        message: error.message || 'Failed to fetch certificate',
-      },
-    });
-  }
-});
-
-/**
  * Verify a certificate by verification code
  * GET /api/certificates/verify/:verificationCode
  */
@@ -143,6 +109,40 @@ router.get('/verify/:verificationCode', async (req: AuthRequest, res: Response):
       error: {
         code: 'VERIFICATION_FAILED',
         message: error.message || 'Failed to verify certificate',
+      },
+    });
+  }
+});
+
+/**
+ * Get a specific certificate
+ * GET /api/certificates/:certificateId
+ */
+router.get('/:certificateId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { certificateId } = req.params;
+
+    const certificate = await certificateService.getCertificate(certificateId);
+
+    if (!certificate) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Certificate not found',
+        },
+      });
+      return;
+    }
+
+    res.json({
+      certificate,
+    });
+  } catch (error: any) {
+    console.error('Error fetching certificate:', error);
+    res.status(500).json({
+      error: {
+        code: 'FETCH_FAILED',
+        message: error.message || 'Failed to fetch certificate',
       },
     });
   }

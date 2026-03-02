@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS sport_profiles (
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   sport VARCHAR(50) NOT NULL,
   statistics JSONB NOT NULL DEFAULT '{}',
+  base_price NUMERIC DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, sport)
@@ -262,6 +263,23 @@ CREATE TABLE IF NOT EXISTS certificates (
   issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Org-Team affiliation invitations
+CREATE TABLE IF NOT EXISTS org_team_invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(org_id, team_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_team_invitations_team ON org_team_invitations(team_id);
+CREATE INDEX IF NOT EXISTS idx_org_team_invitations_org ON org_team_invitations(org_id);
+
+-- Add organization_id to teams if not exists (for affiliation)
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES users(id);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sport_profiles_user_sport ON sport_profiles(user_id, sport);
@@ -285,3 +303,66 @@ CREATE INDEX IF NOT EXISTS idx_payouts_host ON payouts(host_id);
 CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read);
+
+-- Team leave requests (player requests to leave, host approves/rejects)
+CREATE TABLE IF NOT EXISTS team_leave_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  player_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Cricket statistics tables
+CREATE TABLE IF NOT EXISTS cricket_batting_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  innings INTEGER NOT NULL DEFAULT 1,
+  player_id UUID,
+  batsman_name VARCHAR(255) NOT NULL,
+  runs INTEGER NOT NULL DEFAULT 0,
+  balls INTEGER NOT NULL DEFAULT 0,
+  fours INTEGER NOT NULL DEFAULT 0,
+  sixes INTEGER NOT NULL DEFAULT 0,
+  strike_rate DECIMAL(6,2) NOT NULL DEFAULT 0,
+  dismissal VARCHAR(100),
+  is_not_out BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cricket_bowling_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  innings INTEGER NOT NULL DEFAULT 1,
+  player_id UUID,
+  bowler_name VARCHAR(255) NOT NULL,
+  overs DECIMAL(4,1) NOT NULL DEFAULT 0,
+  maidens INTEGER NOT NULL DEFAULT 0,
+  runs_conceded INTEGER NOT NULL DEFAULT 0,
+  wickets INTEGER NOT NULL DEFAULT 0,
+  economy DECIMAL(5,2) NOT NULL DEFAULT 0,
+  wides INTEGER NOT NULL DEFAULT 0,
+  no_balls INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cricket_ball_details (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+  innings INTEGER NOT NULL DEFAULT 1,
+  over_number INTEGER NOT NULL DEFAULT 0,
+  ball_number INTEGER NOT NULL DEFAULT 0,
+  bowler_id UUID,
+  bowler VARCHAR(255),
+  batsman_id UUID,
+  batsman VARCHAR(255),
+  runs INTEGER NOT NULL DEFAULT 0,
+  extras_type VARCHAR(50),
+  extras_runs INTEGER NOT NULL DEFAULT 0,
+  is_wicket BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

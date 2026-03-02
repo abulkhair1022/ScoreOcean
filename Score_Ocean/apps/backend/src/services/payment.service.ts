@@ -1,4 +1,5 @@
-import Stripe from 'stripe';
+import Razorpay from 'razorpay';
+import crypto from 'crypto';
 import { query } from '../db/postgres';
 import { config } from '../config';
 import { AppError } from '../middleware/errorHandler';
@@ -22,9 +23,10 @@ export interface Payment {
 }
 
 export interface PaymentSession {
-  sessionId: string;
-  paymentUrl: string;
-  expiresAt: Date;
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
 }
 
 export enum PaymentStatus {
@@ -52,13 +54,14 @@ export enum PayoutStatus {
 }
 
 export class PaymentService {
-  private stripe: Stripe | null = null;
+  private razorpay: Razorpay | null = null;
 
   constructor() {
-    // Initialize Stripe only if credentials are provided
+    // Initialize Razorpay only if credentials are provided
     if (config.payment.gatewayKey && config.payment.gatewaySecret) {
-      this.stripe = new Stripe(config.payment.gatewaySecret, {
-        apiVersion: '2026-01-28.clover',
+      this.razorpay = new Razorpay({
+        key_id: config.payment.gatewayKey,
+        key_secret: config.payment.gatewaySecret,
       });
     }
   }
@@ -66,8 +69,8 @@ export class PaymentService {
   /**
    * Check if payment gateway is configured
    */
-  private ensureStripeConfigured(): void {
-    if (!this.stripe) {
+  private ensureRazorpayConfigured(): void {
+    if (!this.razorpay) {
       throw new AppError(
         'Payment gateway is not configured. Please contact support.',
         503
@@ -86,7 +89,7 @@ export class PaymentService {
    * Initiate payment for tournament registration
    */
   async initiatePayment(paymentData: PaymentCreate): Promise<PaymentSession> {
-    this.ensureStripeConfigured();
+    this.ensureRazorpayConfigured();
 
     // Validate amount
     if (paymentData.amount <= 0) {
@@ -123,94 +126,134 @@ export class PaymentService {
 
     const payment = paymentResult.rows[0];
 
-    // Create Stripe checkout session
-    const session = await this.stripe!.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'inr',
-            product_data: {
-              name: `Tournament Registration: ${tournament.name}`,
-              description: `Registration fee for ${tournament.name}`,
-            },
-            unit_amount: Math.round(paymentData.amount * 100), // Convert to paise
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel`,
-      metadata: {
+    // Create Razorpay order
+    const order = await this.razorpay!.orders.create({
+      amount: Math.round(paymentData.amount * 100), // Convert to paise
+      currency: 'INR',
+      receipt: payment.id,
+      notes: {
         paymentId: payment.id,
         userId: paymentData.userId,
         tournamentId: paymentData.tournamentId,
+        tournamentName: tournament.name,
       },
-      expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes
     });
 
-    // Update payment with session ID
+    // Update payment with order ID
     await query(
       'UPDATE payments SET gateway_transaction_id = $1, status = $2 WHERE id = $3',
-      [session.id, PaymentStatus.PROCESSING, payment.id]
+      [order.id, PaymentStatus.PROCESSING, payment.id]
     );
 
     return {
-      sessionId: session.id,
-      paymentUrl: session.url!,
-      expiresAt: new Date(session.expires_at * 1000),
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: config.payment.gatewayKey!,
     };
   }
 
   /**
-   * Handle Stripe webhook events
+   * Verify Razorpay payment signature
    */
-  async handleWebhook(payload: string | Buffer, signature: string): Promise<void> {
-    this.ensureStripeConfigured();
+  verifyPaymentSignature(
+    orderId: string,
+    paymentId: string,
+    signature: string
+  ): boolean {
+    if (!config.payment.gatewaySecret) {
+      throw new AppError('Payment gateway secret is not configured.', 500);
+    }
+
+    const text = `${orderId}|${paymentId}`;
+    const generatedSignature = crypto
+      .createHmac('sha256', config.payment.gatewaySecret)
+      .update(text)
+      .digest('hex');
+
+    return generatedSignature === signature;
+  }
+
+  /**
+   * Complete payment after verification (for local development without webhooks)
+   */
+  async completePayment(orderId: string, paymentId: string): Promise<void> {
+    // Find payment by order ID
+    const paymentResult = await query(
+      'SELECT id, user_id, tournament_id FROM payments WHERE gateway_transaction_id = $1',
+      [orderId]
+    );
+
+    if (paymentResult.rows.length === 0) {
+      throw new AppError('Payment not found.', 404);
+    }
+
+    const payment = paymentResult.rows[0];
+
+    // Simulate the webhook payment captured event
+    await this.handlePaymentCaptured({
+      order_id: orderId,
+      id: paymentId,
+      status: 'captured'
+    });
+  }
+
+  /**
+   * Handle Razorpay webhook events
+   */
+  async handleWebhook(payload: any, signature: string): Promise<void> {
+    this.ensureRazorpayConfigured();
 
     if (!config.payment.webhookSecret) {
       throw new AppError('Webhook secret is not configured.', 500);
     }
 
-    let event: Stripe.Event;
+    // Verify webhook signature
+    const expectedSignature = crypto
+      .createHmac('sha256', config.payment.webhookSecret)
+      .update(JSON.stringify(payload))
+      .digest('hex');
 
-    try {
-      event = this.stripe!.webhooks.constructEvent(
-        payload,
-        signature,
-        config.payment.webhookSecret
-      );
-    } catch (error) {
+    if (expectedSignature !== signature) {
       throw new AppError('Invalid webhook signature.', 400);
     }
 
+    const event = payload.event;
+
     // Handle different event types
-    switch (event.type) {
-      case 'checkout.session.completed':
-        await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+    switch (event) {
+      case 'payment.captured':
+        await this.handlePaymentCaptured(payload.payload.payment.entity);
         break;
-      case 'checkout.session.expired':
-        await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
+      case 'payment.failed':
+        await this.handlePaymentFailed(payload.payload.payment.entity);
         break;
-      case 'payment_intent.payment_failed':
-        await this.handlePaymentFailed(event.data.object as Stripe.PaymentIntent);
+      case 'order.paid':
+        await this.handleOrderPaid(payload.payload.order.entity);
         break;
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log(`Unhandled event type: ${event}`);
     }
   }
 
   /**
-   * Handle successful checkout session
+   * Handle successful payment capture
    */
-  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
-    const paymentId = session.metadata?.paymentId;
+  private async handlePaymentCaptured(payment: any): Promise<void> {
+    const orderId = payment.order_id;
 
-    if (!paymentId) {
-      console.error('Payment ID not found in session metadata');
+    // Find payment by order ID
+    const paymentResult = await query(
+      'SELECT id, user_id, tournament_id FROM payments WHERE gateway_transaction_id = $1',
+      [orderId]
+    );
+
+    if (paymentResult.rows.length === 0) {
+      console.error('Payment not found for order ID:', orderId);
       return;
     }
+
+    const dbPayment = paymentResult.rows[0];
 
     await query('BEGIN', []);
 
@@ -218,37 +261,56 @@ export class PaymentService {
       // Update payment status
       await query(
         'UPDATE payments SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [PaymentStatus.COMPLETED, paymentId]
+        [PaymentStatus.COMPLETED, dbPayment.id]
       );
 
-      // Get payment details
-      const paymentResult = await query(
-        'SELECT tournament_id, user_id FROM payments WHERE id = $1',
-        [paymentId]
+      // Get tournament details
+      const tournamentResult = await query(
+        'SELECT name, format FROM tournaments WHERE id = $1',
+        [dbPayment.tournament_id]
       );
 
-      if (paymentResult.rows.length > 0) {
-        const payment = paymentResult.rows[0];
+      if (tournamentResult.rows.length === 0) {
+        throw new Error('Tournament not found');
+      }
 
-        // Update tournament registration status
+      const tournament = tournamentResult.rows[0];
+      const isLeague = tournament.format === 'LEAGUE';
+
+      if (isLeague) {
+        // For leagues: Update player registration
+        await query(
+          'UPDATE tournament_registrations SET status = $1, payment_id = $2 WHERE tournament_id = $3 AND player_id = $4',
+          ['CONFIRMED', dbPayment.id, dbPayment.tournament_id, dbPayment.user_id]
+        );
+
+        // Send confirmation notification to player
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, channels, data)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            dbPayment.user_id,
+            'REGISTRATION_CONFIRMED',
+            'Payment Successful - Registration Confirmed',
+            `Payment successful! You have been registered for "${tournament.name}". Teams will be formed after the auction.`,
+            ['IN_APP', 'EMAIL'],
+            JSON.stringify({ tournamentId: dbPayment.tournament_id, paymentId: dbPayment.id }),
+          ]
+        );
+      } else {
+        // For tournaments: Update team registration
         await query(
           'UPDATE tournament_registrations SET status = $1, payment_id = $2 WHERE tournament_id = $3 AND team_id IN (SELECT id FROM teams WHERE host_id = $4)',
-          ['CONFIRMED', paymentId, payment.tournament_id, payment.user_id]
+          ['CONFIRMED', dbPayment.id, dbPayment.tournament_id, dbPayment.user_id]
         );
 
-        // Get tournament and team details for notification
-        const tournamentResult = await query(
-          'SELECT name FROM tournaments WHERE id = $1',
-          [payment.tournament_id]
-        );
-
+        // Get team details
         const teamResult = await query(
           'SELECT id, name FROM teams WHERE host_id = $1',
-          [payment.user_id]
+          [dbPayment.user_id]
         );
 
-        if (tournamentResult.rows.length > 0 && teamResult.rows.length > 0) {
-          const tournament = tournamentResult.rows[0];
+        if (teamResult.rows.length > 0) {
           const team = teamResult.rows[0];
 
           // Send confirmation notification to team host
@@ -256,12 +318,12 @@ export class PaymentService {
             `INSERT INTO notifications (user_id, type, title, message, channels, data)
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
-              payment.user_id,
+              dbPayment.user_id,
               'REGISTRATION_CONFIRMED',
               'Payment Successful - Registration Confirmed',
               `Payment successful! Your team "${team.name}" has been registered for "${tournament.name}"`,
               ['IN_APP', 'EMAIL'],
-              JSON.stringify({ tournamentId: payment.tournament_id, teamId: team.id, paymentId }),
+              JSON.stringify({ tournamentId: dbPayment.tournament_id, teamId: team.id, paymentId: dbPayment.id }),
             ]
           );
 
@@ -281,7 +343,7 @@ export class PaymentService {
                 'Team Registration Confirmed',
                 `Your team "${team.name}" has been registered for "${tournament.name}"`,
                 ['IN_APP', 'EMAIL'],
-                JSON.stringify({ tournamentId: payment.tournament_id, teamId: team.id }),
+                JSON.stringify({ tournamentId: dbPayment.tournament_id, teamId: team.id }),
               ]
             );
           }
@@ -291,69 +353,38 @@ export class PaymentService {
       await query('COMMIT', []);
     } catch (error) {
       await query('ROLLBACK', []);
-      console.error('Error handling checkout session completed:', error);
+      console.error('Error handling payment captured:', error);
       throw error;
     }
   }
 
   /**
-   * Handle expired checkout session
+   * Handle order paid event
    */
-  private async handleCheckoutSessionExpired(session: Stripe.Checkout.Session): Promise<void> {
-    const paymentId = session.metadata?.paymentId;
-
-    if (!paymentId) {
-      console.error('Payment ID not found in session metadata');
-      return;
-    }
-
-    // Update payment status to failed
-    await query(
-      'UPDATE payments SET status = $1 WHERE id = $2',
-      [PaymentStatus.FAILED, paymentId]
-    );
-
-    // Get payment details for notification
-    const paymentResult = await query(
-      'SELECT user_id, tournament_id FROM payments WHERE id = $1',
-      [paymentId]
-    );
-
-    if (paymentResult.rows.length > 0) {
-      const payment = paymentResult.rows[0];
-
-      // Send notification about payment expiration
-      await query(
-        `INSERT INTO notifications (user_id, type, title, message, channels, data)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          payment.user_id,
-          'TOURNAMENT_UPDATE',
-          'Payment Session Expired',
-          'Your payment session has expired. Please try registering again.',
-          ['IN_APP', 'EMAIL'],
-          JSON.stringify({ tournamentId: payment.tournament_id, paymentId }),
-        ]
-      );
-    }
+  private async handleOrderPaid(order: any): Promise<void> {
+    // This is called when an order is fully paid
+    // We handle this in handlePaymentCaptured, but keeping for completeness
+    console.log('Order paid:', order.id);
   }
 
   /**
    * Handle failed payment
    */
-  private async handlePaymentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    // Find payment by gateway transaction ID
+  private async handlePaymentFailed(payment: any): Promise<void> {
+    const orderId = payment.order_id;
+
+    // Find payment by order ID
     const paymentResult = await query(
       'SELECT id, user_id, tournament_id FROM payments WHERE gateway_transaction_id = $1',
-      [paymentIntent.id]
+      [orderId]
     );
 
     if (paymentResult.rows.length > 0) {
-      const payment = paymentResult.rows[0];
+      const dbPayment = paymentResult.rows[0];
       
       await query(
         'UPDATE payments SET status = $1 WHERE id = $2',
-        [PaymentStatus.FAILED, payment.id]
+        [PaymentStatus.FAILED, dbPayment.id]
       );
 
       // Send notification about payment failure
@@ -361,12 +392,12 @@ export class PaymentService {
         `INSERT INTO notifications (user_id, type, title, message, channels, data)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          payment.user_id,
+          dbPayment.user_id,
           'TOURNAMENT_UPDATE',
           'Payment Failed',
-          'Your payment failed. Please try again or contact support if the issue persists.',
+          `Your payment failed. Reason: ${payment.error_description || 'Unknown error'}. Please try again or contact support.`,
           ['IN_APP', 'EMAIL'],
-          JSON.stringify({ tournamentId: payment.tournament_id, paymentId: payment.id }),
+          JSON.stringify({ tournamentId: dbPayment.tournament_id, paymentId: dbPayment.id }),
         ]
       );
     }

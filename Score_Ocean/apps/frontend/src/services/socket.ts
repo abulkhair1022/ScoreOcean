@@ -11,13 +11,15 @@ class SocketService {
     }
 
     const token = localStorage.getItem('accessToken');
+    // In dev, route through Vite proxy (/socket.io is proxied to :3000 with ws:true).
+    // In prod, use VITE_API_URL base or same origin.
     const socketUrl = import.meta.env.PROD
-      ? import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000'
-      : 'http://localhost:3000';
+      ? import.meta.env.VITE_API_URL?.replace('/api', '') || window.location.origin
+      : window.location.origin;
 
     this.socket = io(socketUrl, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],  // polling first, then upgrade to WS
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,

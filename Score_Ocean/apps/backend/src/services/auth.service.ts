@@ -25,6 +25,7 @@ export interface RegisterInput {
   state?: string;
   country?: string;
   phone?: string;
+  sport?: string; // For TEAM role users
 }
 
 export interface LoginInput {
@@ -215,6 +216,45 @@ export class AuthService {
           input.phone?.trim() || null,
         ]
       );
+
+      // If user role is TEAM, automatically create a team entity
+      if (input.role === UserRole.TEAM) {
+        // Use the user's name as the team name
+        const teamName = input.name.trim();
+        const city = input.city?.trim() || '';
+        const state = input.state?.trim() || '';
+        const country = input.country?.trim() || 'India';
+        const sport = input.sport || 'CRICKET'; // Use provided sport or default to CRICKET
+        
+        // Create team
+        const teamResult = await query(
+          `INSERT INTO teams (name, sport, host_id, city, state, country, statistics)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [
+            teamName,
+            sport,
+            user.id,
+            city,
+            state,
+            country,
+            JSON.stringify({ matchesPlayed: 0, wins: 0, losses: 0, draws: 0 }),
+          ]
+        );
+
+        const teamId = teamResult.rows[0].id;
+
+        // Create sport profile for the team
+        await query(
+          `INSERT INTO team_sport_profiles (team_id, sport, statistics)
+           VALUES ($1, $2, $3)`,
+          [
+            teamId,
+            sport,
+            JSON.stringify({ matchesPlayed: 0, wins: 0, losses: 0, draws: 0 }),
+          ]
+        );
+      }
 
       // Commit transaction
       await query('COMMIT', []);

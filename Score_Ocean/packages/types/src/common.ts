@@ -17,6 +17,8 @@ export interface TimeRange {
 export enum Sport {
   CRICKET = 'CRICKET',
   FOOTBALL = 'FOOTBALL',
+  BASKETBALL = 'BASKETBALL',
+  BADMINTON = 'BADMINTON',
   KABADDI = 'KABADDI',
   VOLLEYBALL = 'VOLLEYBALL',
 }

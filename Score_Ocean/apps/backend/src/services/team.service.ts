@@ -6,11 +6,36 @@ import { AppError } from '../middleware/errorHandler';
 const ROSTER_CONSTRAINTS: Record<Sport, { min: number; max: number }> = {
   [Sport.CRICKET]: { min: 11, max: 15 },
   [Sport.FOOTBALL]: { min: 11, max: 18 },
+  [Sport.BASKETBALL]: { min: 5, max: 12 },
+  [Sport.BADMINTON]: { min: 1, max: 4 },
   [Sport.KABADDI]: { min: 7, max: 12 },
   [Sport.VOLLEYBALL]: { min: 6, max: 12 },
 };
 
 export class TeamService {
+  /**
+   * Get all teams (for browsing/searching)
+   */
+  async getAllTeams(filters?: { sport?: string }): Promise<Team[]> {
+    let queryText = 'SELECT * FROM teams ORDER BY created_at DESC';
+    const params: any[] = [];
+
+    if (filters?.sport) {
+      queryText = 'SELECT * FROM teams WHERE sport = $1 ORDER BY created_at DESC';
+      params.push(filters.sport);
+    }
+
+    const result = await query(queryText, params);
+
+    const teams = await Promise.all(
+      result.rows.map(async (row) => {
+        return this.mapRowToTeam(row);
+      })
+    );
+
+    return teams;
+  }
+
   /**
    * Get all teams for a user (either as host or as member)
    */
@@ -187,7 +212,7 @@ export class TeamService {
    */
   async getRoster(teamId: string): Promise<any[]> {
     const result = await query(
-      `SELECT tr.id, tr.player_id, tr.joined_at, up.name
+      `SELECT tr.id, tr.player_id, tr.joined_at, up.name, up.avatar_url
        FROM team_rosters tr
        JOIN user_profiles up ON tr.player_id = up.user_id
        WHERE tr.team_id = $1
@@ -198,6 +223,7 @@ export class TeamService {
     return result.rows.map(row => ({
       id: row.player_id,
       name: row.name,
+      avatarUrl: row.avatar_url,
       joinedAt: row.joined_at,
     }));
   }
@@ -239,6 +265,18 @@ export class TeamService {
   private async mapRowToTeam(row: any): Promise<Team> {
     const roster = await this.getRoster(row.id);
 
+    // Fetch organization name if team belongs to one
+    let organizationName = undefined;
+    if (row.organization_id) {
+      const orgResult = await query(
+        'SELECT name FROM user_profiles WHERE user_id = $1',
+        [row.organization_id]
+      );
+      if (orgResult.rows.length > 0) {
+        organizationName = orgResult.rows[0].name;
+      }
+    }
+
     return {
       id: row.id,
       name: row.name,
@@ -249,11 +287,125 @@ export class TeamService {
         country: row.country || '',
       },
       hostId: row.host_id,
+      captainId: row.captain_id || undefined,
+      organizationId: row.organization_id || undefined,
+      organizationName,
       roster,
       statistics: row.statistics || { matchesPlayed: 0, wins: 0, losses: 0, draws: 0 },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  /**
+   * Get team's sport profiles (all sports the team participates in)
+   */
+  async getTeamSportProfiles(teamId: string): Promise<any[]> {
+    const result = await query(
+      `SELECT id, sport, statistics, created_at, updated_at
+       FROM team_sport_profiles
+       WHERE team_id = $1
+       ORDER BY created_at ASC`,
+      [teamId]
+    );
+
+    return result.rows.map(row => ({
+      id: row.id,
+      sport: row.sport,
+      statistics: row.statistics,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  /**
+   * Add a sport to team's profile
+   */
+  async addSportToTeam(teamId: string, sport: Sport): Promise<void> {
+    // Verify team exists
+    await this.getTeam(teamId);
+
+    // Validate sport
+    const validSports = Object.values(Sport);
+    if (!validSports.includes(sport)) {
+      throw new AppError(`Invalid sport. Must be one of: ${validSports.join(', ')}`, 400);
+    }
+
+    // Check if sport profile already exists
+    const existingResult = await query(
+      'SELECT id FROM team_sport_profiles WHERE team_id = $1 AND sport = $2',
+      [teamId, sport]
+    );
+
+    if (existingResult.rows.length > 0) {
+      throw new AppError(`Team already has a profile for ${sport}`, 400);
+    }
+
+    // Create sport profile
+    await query(
+      `INSERT INTO team_sport_profiles (team_id, sport, statistics)
+       VALUES ($1, $2, $3)`,
+      [teamId, sport, JSON.stringify({ matchesPlayed: 0, wins: 0, losses: 0, draws: 0 })]
+    );
+  }
+
+  /**
+   * Remove a sport from team's profile
+   */
+  async removeSportFromTeam(teamId: string, sport: Sport): Promise<void> {
+    // Verify team exists
+    const team = await this.getTeam(teamId);
+
+    // Check if this is the team's primary sport
+    if (team.sport === sport) {
+      throw new AppError(
+        'Cannot remove primary sport. Please change the primary sport first.',
+        400
+      );
+    }
+
+    // Remove sport profile
+    const result = await query(
+      'DELETE FROM team_sport_profiles WHERE team_id = $1 AND sport = $2',
+      [teamId, sport]
+    );
+
+    if (result.rowCount === 0) {
+      throw new AppError(`Team does not have a profile for ${sport}`, 404);
+    }
+  }
+
+  /**
+   * Change team's primary sport
+   */
+  async changePrimarySport(teamId: string, sport: Sport): Promise<void> {
+    // Verify team exists
+    await this.getTeam(teamId);
+
+    // Validate sport
+    const validSports = Object.values(Sport);
+    if (!validSports.includes(sport)) {
+      throw new AppError(`Invalid sport. Must be one of: ${validSports.join(', ')}`, 400);
+    }
+
+    // Check if team has a profile for this sport
+    const sportProfileResult = await query(
+      'SELECT id FROM team_sport_profiles WHERE team_id = $1 AND sport = $2',
+      [teamId, sport]
+    );
+
+    if (sportProfileResult.rows.length === 0) {
+      throw new AppError(
+        `Team does not have a profile for ${sport}. Please add the sport first.`,
+        400
+      );
+    }
+
+    // Update team's primary sport
+    await query(
+      'UPDATE teams SET sport = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [sport, teamId]
+    );
   }
 
   /**
@@ -290,7 +442,7 @@ export class TeamService {
     );
 
     if (invitationCheck.rows.length > 0) {
-      throw new AppError('Player already has a pending invitation', 400);
+      throw new AppError('Player already has a pending invitation from this team. Ask them to check their dashboard.', 400);
     }
 
     // Create invitation
@@ -332,6 +484,26 @@ export class TeamService {
     const invitation = invitationResult.rows[0];
     const teamId = invitation.team_id;
 
+    // Get the team's sport to enforce one-team-per-sport rule
+    const teamSportResult = await query('SELECT sport, name FROM teams WHERE id = $1', [teamId]);
+    const teamSport = teamSportResult.rows[0]?.sport;
+
+    // Check if player is already in another team for this sport
+    const existingTeamResult = await query(
+      `SELECT t.name, t.id FROM team_rosters tr
+       JOIN teams t ON tr.team_id = t.id
+       WHERE tr.player_id = $1 AND t.sport = $2`,
+      [playerId, teamSport]
+    );
+
+    if (existingTeamResult.rows.length > 0) {
+      const existingTeam = existingTeamResult.rows[0];
+      throw new AppError(
+        `Player is already in a ${teamSport} team ("${existingTeam.name}"). A player can only be in one team per sport. Please leave that team first.`,
+        400
+      );
+    }
+
     // Get team to check roster constraints
     const team = await this.getTeam(teamId);
     const validation = await this.validateRoster(teamId, team.sport);
@@ -354,10 +526,10 @@ export class TeamService {
         [InvitationStatus.ACCEPTED, invitationId]
       );
 
-      // Add player to roster
+      // Add player to roster (use team's primary sport for now)
       await query(
-        'INSERT INTO team_rosters (team_id, player_id) VALUES ($1, $2)',
-        [teamId, playerId]
+        'INSERT INTO team_rosters (team_id, player_id, sport) VALUES ($1, $2, $3)',
+        [teamId, playerId, team.sport]
       );
 
       // Commit transaction
@@ -405,9 +577,9 @@ export class TeamService {
       `SELECT ti.*, t.name as team_name
        FROM team_invitations ti
        JOIN teams t ON ti.team_id = t.id
-       WHERE ti.player_id = $1
+       WHERE ti.player_id = $1 AND ti.status = $2
        ORDER BY ti.created_at DESC`,
-      [playerId]
+      [playerId, InvitationStatus.PENDING]
     );
 
     return result.rows.map(row => ({
@@ -416,6 +588,7 @@ export class TeamService {
       playerId: row.player_id,
       status: row.status as InvitationStatus,
       createdAt: row.created_at,
+      teamName: row.team_name, // Add team name to response
     }));
   }
 
@@ -525,7 +698,23 @@ export class TeamService {
       throw new AppError('Player not found or user is not a player', 404);
     }
 
-    // Check if player is already in roster
+    // Check if player is already in another team for the same sport (one team per sport)
+    const existingTeamResult = await query(
+      `SELECT t.name, t.id FROM team_rosters tr
+       JOIN teams t ON tr.team_id = t.id
+       WHERE tr.player_id = $1 AND t.sport = $2`,
+      [playerId, team.sport]
+    );
+
+    if (existingTeamResult.rows.length > 0) {
+      const existingTeam = existingTeamResult.rows[0];
+      throw new AppError(
+        `Player is already in a ${team.sport} team ("${existingTeam.name}"). A player can only be in one team per sport.`,
+        400
+      );
+    }
+
+    // Check if player is already in this roster
     const rosterCheck = await query(
       'SELECT id FROM team_rosters WHERE team_id = $1 AND player_id = $2',
       [teamId, playerId]
@@ -544,10 +733,10 @@ export class TeamService {
       );
     }
 
-    // Add player to roster
+    // Add player to roster (use team's primary sport for now)
     await query(
-      'INSERT INTO team_rosters (team_id, player_id) VALUES ($1, $2)',
-      [teamId, playerId]
+      'INSERT INTO team_rosters (team_id, player_id, sport) VALUES ($1, $2, $3)',
+      [teamId, playerId, team.sport]
     );
   }
 
@@ -573,6 +762,228 @@ export class TeamService {
       'DELETE FROM team_rosters WHERE team_id = $1 AND player_id = $2',
       [teamId, playerId]
     );
+  }
+
+  /**
+   * Player requests to leave a team (sends notification to host for approval)
+   */
+  async requestLeave(playerId: string, teamId: string, reason?: string): Promise<void> {
+    // Verify player is in the team
+    const rosterCheck = await query(
+      'SELECT id FROM team_rosters WHERE team_id = $1 AND player_id = $2',
+      [teamId, playerId]
+    );
+
+    if (rosterCheck.rows.length === 0) {
+      throw new AppError('You are not a member of this team', 400);
+    }
+
+    // Check if there's already a pending leave request
+    const existingRequest = await query(
+      `SELECT id FROM team_leave_requests WHERE team_id = $1 AND player_id = $2 AND status = 'PENDING'`,
+      [teamId, playerId]
+    );
+
+    if (existingRequest.rows.length > 0) {
+      throw new AppError('You already have a pending leave request for this team', 400);
+    }
+
+    // Create leave request
+    await query(
+      `INSERT INTO team_leave_requests (team_id, player_id, reason, status) VALUES ($1, $2, $3, 'PENDING')`,
+      [teamId, playerId, reason || null]
+    );
+
+    // Notify host
+    const team = await this.getTeam(teamId);
+    const playerResult = await query(
+      'SELECT name FROM user_profiles WHERE user_id = $1',
+      [playerId]
+    );
+    const playerName = playerResult.rows[0]?.name || 'A player';
+
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, data, channels)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        team.hostId,
+        'TEAM_INVITATION',
+        'Leave Request Received',
+        `${playerName} has requested to leave "${team.name}"${reason ? `: "${reason}"` : ''}. Please approve or reject this request.`,
+        JSON.stringify({ teamId, playerId, type: 'LEAVE_REQUEST' }),
+        ['IN_APP'],
+      ]
+    );
+  }
+
+  /**
+   * Get pending leave requests for a team (for host)
+   */
+  async getLeaveRequests(teamId: string): Promise<any[]> {
+    const result = await query(
+      `SELECT tlr.id, tlr.player_id, tlr.reason, tlr.status, tlr.created_at,
+              up.name as player_name, up.avatar_url
+       FROM team_leave_requests tlr
+       JOIN user_profiles up ON tlr.player_id = up.user_id
+       WHERE tlr.team_id = $1 AND tlr.status = 'PENDING'
+       ORDER BY tlr.created_at ASC`,
+      [teamId]
+    );
+
+    return result.rows.map(row => ({
+      id: row.id,
+      playerId: row.player_id,
+      playerName: row.player_name,
+      avatarUrl: row.avatar_url,
+      reason: row.reason,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
+   * Host approves a leave request — removes player from roster
+   */
+  async approveLeaveRequest(requestId: string, teamId: string): Promise<void> {
+    const requestResult = await query(
+      `SELECT * FROM team_leave_requests WHERE id = $1 AND team_id = $2 AND status = 'PENDING'`,
+      [requestId, teamId]
+    );
+
+    if (requestResult.rows.length === 0) {
+      throw new AppError('Leave request not found or already processed', 404);
+    }
+
+    const { player_id: playerId } = requestResult.rows[0];
+
+    await query('BEGIN', []);
+    try {
+      // Mark request approved
+      await query(
+        `UPDATE team_leave_requests SET status = 'APPROVED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [requestId]
+      );
+
+      // Remove from roster
+      await query(
+        'DELETE FROM team_rosters WHERE team_id = $1 AND player_id = $2',
+        [teamId, playerId]
+      );
+
+      await query('COMMIT', []);
+    } catch (e) {
+      await query('ROLLBACK', []);
+      throw e;
+    }
+
+    // Notify player
+    const team = await this.getTeam(teamId);
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, channels)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        playerId,
+        'TEAM_INVITATION',
+        'Leave Request Approved',
+        `Your request to leave "${team.name}" has been approved. You are no longer a member.`,
+        ['IN_APP'],
+      ]
+    );
+  }
+
+  /**
+   * Host rejects a leave request
+   */
+  async rejectLeaveRequest(requestId: string, teamId: string): Promise<void> {
+    const requestResult = await query(
+      `SELECT * FROM team_leave_requests WHERE id = $1 AND team_id = $2 AND status = 'PENDING'`,
+      [requestId, teamId]
+    );
+
+    if (requestResult.rows.length === 0) {
+      throw new AppError('Leave request not found or already processed', 404);
+    }
+
+    const { player_id: playerId } = requestResult.rows[0];
+
+    await query(
+      `UPDATE team_leave_requests SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [requestId]
+    );
+
+    // Notify player
+    const team = await this.getTeam(teamId);
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, channels)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        playerId,
+        'TEAM_INVITATION',
+        'Leave Request Rejected',
+        `Your request to leave "${team.name}" has been rejected by the team host.`,
+        ['IN_APP'],
+      ]
+    );
+  }
+
+  /**
+   * Player leaves their current team (self-removal)
+   */
+  async leaveTeam(playerId: string): Promise<void> {
+    // Find player's current team
+    const teamResult = await query(
+      'SELECT team_id, t.name FROM team_rosters tr JOIN teams t ON tr.team_id = t.id WHERE tr.player_id = $1',
+      [playerId]
+    );
+
+    if (teamResult.rows.length === 0) {
+      throw new AppError('Player is not a member of any team', 404);
+    }
+
+    const teamId = teamResult.rows[0].team_id;
+    const teamName = teamResult.rows[0].name;
+
+    // Remove player from roster
+    await query(
+      'DELETE FROM team_rosters WHERE team_id = $1 AND player_id = $2',
+      [teamId, playerId]
+    );
+
+    // Send notification to team host
+    const teamDetails = await this.getTeam(teamId);
+    const playerResult = await query(
+      'SELECT name FROM user_profiles WHERE user_id = $1',
+      [playerId]
+    );
+    const playerName = playerResult.rows[0]?.name || 'A player';
+
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, channels)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        teamDetails.hostId,
+        'TEAM_UPDATE',
+        'Player Left Team',
+        `${playerName} has left your team "${teamName}"`,
+        ['IN_APP', 'EMAIL'],
+      ]
+    );
+  }
+
+  /**
+   * Get player's current team (if any)
+   */
+  async getPlayerTeam(playerId: string): Promise<Team | null> {
+    const result = await query(
+      'SELECT t.* FROM teams t JOIN team_rosters tr ON t.id = tr.team_id WHERE tr.player_id = $1',
+      [playerId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToTeam(result.rows[0]);
   }
 
   /**
@@ -603,6 +1014,90 @@ export class TeamService {
     }
 
     return validation;
+  }
+
+  /**
+   * Assign a captain to the team
+   */
+  async assignCaptain(teamId: string, captainId: string): Promise<void> {
+    // Verify team exists
+    await this.getTeam(teamId);
+
+    // Verify the player is on the team roster
+    const rosterCheck = await query(
+      'SELECT * FROM team_rosters WHERE team_id = $1 AND player_id = $2',
+      [teamId, captainId]
+    );
+
+    if (rosterCheck.rows.length === 0) {
+      throw new AppError('Player must be on the team roster to be assigned as captain', 400);
+    }
+
+    // Update the team's captain
+    await query(
+      'UPDATE teams SET captain_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [captainId, teamId]
+    );
+  }
+
+  /**
+   * Join an organization
+   */
+  async joinOrganization(teamId: string, organizationId: string): Promise<void> {
+    // Verify team exists
+    await this.getTeam(teamId);
+
+    // Verify organization exists
+    const orgResult = await query(
+      'SELECT id FROM users WHERE id = $1 AND role = $2',
+      [organizationId, 'ORGANIZATION']
+    );
+
+    if (orgResult.rows.length === 0) {
+      throw new AppError('Organization not found', 404);
+    }
+
+    // Update team's organization
+    await query(
+      'UPDATE teams SET organization_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [organizationId, teamId]
+    );
+  }
+
+  /**
+   * Get all teams belonging to an organization
+   */
+  async getTeamsByOrganization(organizationId: string): Promise<any[]> {
+    const result = await query(
+      `SELECT t.*, 
+        (SELECT COUNT(*) FROM team_rosters WHERE team_id = t.id) as roster_count,
+        (SELECT COUNT(*) FROM matches WHERE (home_team_id = t.id OR away_team_id = t.id) AND status = 'COMPLETED') as matches_played,
+        (SELECT COUNT(*) FROM matches WHERE (home_team_id = t.id AND home_score > away_score) OR (away_team_id = t.id AND away_score > home_score)) as wins
+       FROM teams t
+       WHERE t.organization_id = $1
+       ORDER BY t.created_at DESC`,
+      [organizationId]
+    );
+
+    return result.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      sport: row.sport,
+      location: {
+        city: row.city,
+        state: row.state,
+        country: row.country
+      },
+      hostId: row.host_id,
+      captainId: row.captain_id,
+      organizationId: row.organization_id,
+      rosterCount: parseInt(row.roster_count) || 0,
+      statistics: {
+        matchesPlayed: parseInt(row.matches_played) || 0,
+        wins: parseInt(row.wins) || 0
+      },
+      createdAt: row.created_at
+    }));
   }
 }
 

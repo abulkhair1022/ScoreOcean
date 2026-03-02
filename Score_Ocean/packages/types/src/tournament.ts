@@ -1,5 +1,10 @@
 import { DateRange, Sport } from './common';
 
+export enum CompetitionType {
+  TOURNAMENT = 'TOURNAMENT', // Team-based competitions
+  LEAGUE = 'LEAGUE',         // Individual player-based competitions
+}
+
 export enum TournamentFormat {
   LEAGUE = 'LEAGUE',
   KNOCKOUT = 'KNOCKOUT',
@@ -20,6 +25,7 @@ export interface Tournament {
   name: string;
   sport: Sport;
   format: TournamentFormat;
+  competitionType: CompetitionType; // NEW: Distinguish between tournament and league
   hostId: string;
   hostType: 'TEAM' | 'ORGANIZATION';
   dates: DateRange;
@@ -29,7 +35,7 @@ export interface Tournament {
   teamCapacity: number;
   status: TournamentStatus;
   rules: SportRules;
-  registrations: Registration[];
+  registrations: (Registration | PlayerRegistration)[];
   fixtures: Fixture[];
   createdAt: Date;
   updatedAt: Date;
@@ -39,6 +45,7 @@ export interface TournamentCreate {
   name: string;
   sport: Sport;
   format: TournamentFormat;
+  competitionType: CompetitionType; // NEW: Required when creating
   dates: DateRange;
   venue: string;
   registrationFee: number;
@@ -64,6 +71,15 @@ export interface Registration {
   registeredAt: Date;
 }
 
+export interface PlayerRegistration {
+  id: string;
+  tournamentId: string;
+  playerId: string;
+  status: RegistrationStatus;
+  paymentId?: string;
+  registeredAt: Date;
+}
+
 export enum RegistrationStatus {
   PENDING = 'PENDING',
   CONFIRMED = 'CONFIRMED',
@@ -83,6 +99,7 @@ export interface Fixture {
 }
 
 export enum MatchStatus {
+  PENDING_ACCEPTANCE = 'PENDING_ACCEPTANCE',
   SCHEDULED = 'SCHEDULED',
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',

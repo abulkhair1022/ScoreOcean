@@ -5,6 +5,7 @@ import { UserRole } from '@score-ocean/types';
 import { AppError } from '../middleware/errorHandler';
 import { validate } from '../middleware/validation';
 import { userSchemas } from '../middleware/validationSchemas';
+import { query } from '../db/postgres';
 
 const router = Router();
 
@@ -31,6 +32,162 @@ const requireProfileOwnership = (req: AuthRequest, _res: any, next: any) => {
 
   next();
 };
+
+// Search users by name or email (for team invitations)
+router.get('/search', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { q, sport } = req.query;
+
+    if (!q || (q as string).trim().length < 1) {
+      res.json([]);
+      return;
+    }
+
+    const searchTerm = `%${(q as string).trim()}%`;
+    const params: any[] = [searchTerm, searchTerm];
+    let sportExclusion = '';
+
+    // If sport provided, exclude players already in a team for that sport
+    if (sport) {
+      params.push(sport);
+      sportExclusion = `
+        AND u.id NOT IN (
+          SELECT tr.player_id FROM team_rosters tr
+          JOIN teams t ON tr.team_id = t.id
+          WHERE t.sport = $3
+        )
+      `;
+    }
+
+    const result = await query(
+      `SELECT u.id, u.email, u.role, up.name, up.avatar_url, up.city, up.state
+       FROM users u
+       JOIN user_profiles up ON u.id = up.user_id
+       WHERE u.role = 'PLAYER'
+         AND (up.name ILIKE $1 OR u.email ILIKE $2)
+         ${sportExclusion}
+       ORDER BY up.name ASC
+       LIMIT 20`,
+      params
+    );
+
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      name: row.name,
+      avatarUrl: row.avatar_url,
+      location: { city: row.city || '', state: row.state || '' },
+    })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all players (for team invitations, etc.)
+router.get('/players/all', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { sport, limit = 100 } = req.query;
+    
+    let whereClause = "WHERE u.role = 'PLAYER'";
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    // Filter by sport if provided
+    if (sport) {
+      whereClause += ` AND EXISTS (
+        SELECT 1 FROM sport_profiles sp 
+        WHERE sp.user_id = u.id AND sp.sport = $${paramIndex++}
+      )`;
+      params.push(sport);
+    }
+    
+    const result = await query(
+      `SELECT 
+        u.id,
+        u.email,
+        u.role,
+        up.name,
+        up.city,
+        up.state,
+        up.country,
+        up.avatar_url,
+        (
+          SELECT json_agg(json_build_object('id', sp.id, 'sport', sp.sport, 'statistics', sp.statistics, 'base_price', sp.base_price))
+          FROM sport_profiles sp
+          WHERE sp.user_id = u.id
+        ) as sport_profiles
+      FROM users u
+      JOIN user_profiles up ON u.id = up.user_id
+      ${whereClause}
+      ORDER BY up.name ASC
+      LIMIT $${paramIndex}`,
+      [...params, limit]
+    );
+    
+    const players = result.rows.map(row => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      name: row.name,
+      location: {
+        city: row.city || '',
+        state: row.state || '',
+        country: row.country || '',
+      },
+      avatarUrl: row.avatar_url,
+      sportProfiles: row.sport_profiles || [],
+    }));
+    
+    res.json(players);
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// Get all organizations (for team joining, etc.)
+router.get('/organizations/all', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { limit = 100 } = req.query;
+    
+    const result = await query(
+      `SELECT 
+        u.id,
+        u.email,
+        u.role,
+        up.name,
+        up.city,
+        up.state,
+        up.country,
+        up.avatar_url,
+        u.created_at
+      FROM users u
+      JOIN user_profiles up ON u.id = up.user_id
+      WHERE u.role = 'ORGANIZATION'
+      ORDER BY up.name ASC
+      LIMIT $1`,
+      [limit]
+    );
+    
+    const organizations = result.rows.map(row => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      name: row.name,
+      location: {
+        city: row.city || '',
+        state: row.state || '',
+        country: row.country || '',
+      },
+      avatarUrl: row.avatar_url,
+      createdAt: row.created_at,
+    }));
+    
+    res.json(organizations);
+  } catch (error: any) {
+    next(error);
+  }
+});
 
 // Get current user's profile
 router.get('/profile', authenticate, async (req: AuthRequest, res, next) => {

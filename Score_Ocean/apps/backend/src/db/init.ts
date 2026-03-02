@@ -6,6 +6,11 @@ export async function initializeDatabase() {
   try {
     const schemaSQL = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
     await pool.query(schemaSQL);
+
+    // Incremental migrations
+    await pool.query(`ALTER TABLE sport_profiles ADD COLUMN IF NOT EXISTS base_price NUMERIC DEFAULT NULL`);
+    await pool.query(`ALTER TABLE auction_players ADD COLUMN IF NOT EXISTS base_price_override NUMERIC DEFAULT NULL`);
+
     console.log('Database schema initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);

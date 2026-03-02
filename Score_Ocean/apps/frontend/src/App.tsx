@@ -6,8 +6,10 @@ import Profile from './pages/Profile';
 import Stats from './pages/Stats';
 import Teams from './pages/Teams';
 import Tournaments from './pages/Tournaments';
+import TournamentManagement from './pages/TournamentManagement';
 import Match from './pages/Match';
 import Auction from './pages/Auction';
+import LeagueAuction from './pages/LeagueAuction';
 import Certificates from './pages/Certificates';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -64,6 +66,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Auction />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/league-auctions/:auctionId"
+            element={
+              <ProtectedRoute>
+                <LeagueAuction />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:tournamentId/manage"
+            element={
+              <ProtectedRoute>
+                <TournamentManagement />
               </ProtectedRoute>
             }
           />

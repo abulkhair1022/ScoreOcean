@@ -6,6 +6,9 @@ export interface Team {
   sport: Sport;
   location: Location;
   hostId: string;
+  captainId?: string;
+  organizationId?: string;
+  organizationName?: string;
   roster: Player[];
   statistics: TeamStats;
   createdAt: Date;
@@ -21,6 +24,7 @@ export interface TeamCreate {
 export interface Player {
   id: string;
   name: string;
+  avatarUrl?: string;
   joinedAt: Date;
 }
 

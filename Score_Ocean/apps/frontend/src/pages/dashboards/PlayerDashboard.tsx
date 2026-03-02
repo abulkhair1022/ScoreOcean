@@ -2,144 +2,205 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/client';
 
-interface Stats {
+const SPORT_META: Record<string, { icon: string; gradient: string; bg: string; text: string }> = {
+  CRICKET:    { icon: '🏏', gradient: 'from-green-500 to-emerald-600',  bg: 'bg-green-50',  text: 'text-green-700' },
+  FOOTBALL:   { icon: '⚽', gradient: 'from-blue-500 to-indigo-600',    bg: 'bg-blue-50',   text: 'text-blue-700' },
+  KABADDI:    { icon: '🤼', gradient: 'from-amber-500 to-orange-600',   bg: 'bg-amber-50',  text: 'text-amber-700' },
+  VOLLEYBALL: { icon: '🏐', gradient: 'from-rose-500 to-pink-600',      bg: 'bg-rose-50',   text: 'text-rose-700' },
+};
+
+const QUICK_ACTIONS = [
+  { to: '/teams',       icon: '🛡️', label: 'My Teams',     desc: 'View & manage teams',    gradient: 'from-emerald-400 to-teal-500' },
+  { to: '/tournaments', icon: '🏆', label: 'Tournaments',  desc: 'Browse & register',      gradient: 'from-violet-400 to-purple-500' },
+  { to: '/stats',       icon: '📊', label: 'My Stats',     desc: 'Performance analytics',  gradient: 'from-ocean-400 to-cyan-500' },
+  { to: '/profile',     icon: '👤', label: 'Edit Profile', desc: 'Update your info',        gradient: 'from-rose-400 to-pink-500' },
+];
+
+interface DashboardStats {
+  sportProfiles: any[];
   totalMatches: number;
   totalTeams: number;
   totalTournaments: number;
-  sportProfiles: any[];
 }
 
 export default function PlayerDashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [invitations, setInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [profileName, setProfileName] = useState('');
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) setUser(JSON.parse(storedUser));
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
-      
-      // Fetch user profile with sport profiles
-      const profileResponse = await apiClient.get('/users/profile');
-      const user = profileResponse.data;
-      
-      // Fetch player invitations
-      try {
-        const invitationsResponse = await apiClient.get(`/teams/invitations/player/${user.id}`);
-        setInvitations(invitationsResponse.data.data || []);
-      } catch (err) {
-        console.error('Error fetching invitations:', err);
-        setInvitations([]);
+      const [profileRes, teamsRes] = await Promise.allSettled([
+        apiClient.get('/users/profile'),
+        apiClient.get('/teams'),
+      ]);
+
+      const u = profileRes.status === 'fulfilled' ? profileRes.value.data : {};
+      const pName = u?.profile?.name || u?.name || '';
+      if (pName) setProfileName(pName);
+      const teamsData = teamsRes.status === 'fulfilled'
+        ? (teamsRes.value.data?.data || teamsRes.value.data || [])
+        : [];
+
+      // Fetch invitations using the user id from profile
+      const userId = u.id || u.userId;
+      if (userId) {
+        try {
+          const invRes = await apiClient.get(`/teams/invitations/player/${userId}`);
+          setInvitations(invRes.data?.data || invRes.data || []);
+        } catch { setInvitations([]); }
       }
 
       setStats({
+        sportProfiles: u.sportProfiles || [],
         totalMatches: 0,
-        totalTeams: 0,
+        totalTeams: Array.isArray(teamsData) ? teamsData.length : 0,
         totalTournaments: 0,
-        sportProfiles: user.sportProfiles || [],
       });
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Dashboard error:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleAcceptInvitation = async (invitationId: string) => {
+    try {
+      setActionLoading(invitationId + '_accept');
+      await apiClient.post(`/teams/invitations/${invitationId}/accept`);
+      setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+    } catch (err) {
+      console.error('Failed to accept invitation:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeclineInvitation = async (invitationId: string) => {
+    try {
+      setActionLoading(invitationId + '_decline');
+      await apiClient.post(`/teams/invitations/${invitationId}/decline`);
+      setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+    } catch (err) {
+      console.error('Failed to decline invitation:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-[500px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin" />
+          <p className="text-gray-500 text-sm">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
+  const name = profileName || user?.name || user?.email?.split('@')[0] || 'Player';
+  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening';
+
   return (
-    <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-lg p-8 text-white">
-        <h1 className="text-3xl font-bold mb-2">Player Dashboard</h1>
-        <p className="text-blue-100">Track your performance, manage teams, and participate in tournaments</p>
-      </div>
+    <div className="space-y-6 animate-fade-in">
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Sport Profiles</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.sportProfiles.length || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
+      {/* Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-700 via-primary-600 to-ocean-600 p-8 text-white">
+        <div className="absolute inset-0">
+          <div className="absolute w-64 h-64 rounded-full opacity-10 bg-white -top-16 -right-16 animate-float" />
+          <div className="absolute w-40 h-40 rounded-full opacity-10 bg-white bottom-0 left-1/3 animate-float-delay" />
+          <div className="absolute inset-0 opacity-[0.05]"
+            style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Matches</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalMatches || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div>
+            <p className="text-primary-200 text-sm font-medium mb-1">{greeting} 👋</p>
+            <h1 className="text-3xl md:text-4xl font-black mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>
+              {name}
+            </h1>
+            <p className="text-primary-100 max-w-md">
+              Track your performance, manage teams, and compete in tournaments.
+            </p>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Teams</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalTeams || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Tournaments</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalTournaments || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
+          <div className="flex gap-3 flex-wrap">
+            <Link to="/profile"
+              className="px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/25 text-white rounded-xl text-sm font-semibold transition-all hover:scale-105">
+              Edit Profile
+            </Link>
+            <Link to="/tournaments"
+              className="px-5 py-2.5 bg-white text-primary-700 rounded-xl text-sm font-bold hover:bg-primary-50 transition-all hover:scale-105 shadow-lg">
+              Find Tournaments
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* Team Invitations */}
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { icon: '🏅', label: 'Sport Profiles', value: stats?.sportProfiles.length ?? 0, gradient: 'from-blue-500 to-indigo-600', bg: 'bg-blue-50', text: 'text-blue-600' },
+          { icon: '⚡', label: 'Matches Played', value: stats?.totalMatches ?? 0, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-600' },
+          { icon: '🛡️', label: 'Teams',          value: stats?.totalTeams ?? 0, gradient: 'from-emerald-500 to-teal-600', bg: 'bg-emerald-50', text: 'text-emerald-600' },
+          { icon: '🏆', label: 'Tournaments',    value: stats?.totalTournaments ?? 0, gradient: 'from-violet-500 to-purple-600', bg: 'bg-violet-50', text: 'text-violet-600' },
+        ].map((s) => (
+          <div key={s.label} className="card-hover p-6">
+            <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center text-xl mb-4 shadow-sm`}>
+              {s.icon}
+            </div>
+            <div className={`text-3xl font-black ${s.text} mb-1`}>{s.value}</div>
+            <div className="text-sm text-gray-500 font-medium">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Invitations */}
       {invitations.length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Team Invitations</h2>
+        <div className="card p-6">
+          <div className="section-header">
+            <h2 className="section-title flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">📩</span>
+              Team Invitations
+              <span className="w-5 h-5 bg-amber-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                {invitations.length}
+              </span>
+            </h2>
+          </div>
           <div className="space-y-3">
-            {invitations.map((invitation: any) => (
-              <div key={invitation.id} className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Invitation from team</p>
-                  <p className="text-sm text-gray-600">Respond to join the team</p>
+            {invitations.map((inv: any) => (
+              <div key={inv.id} className="flex items-center gap-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl hover:border-amber-300 transition-colors">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xl shadow-sm">
+                  🛡️
                 </div>
-                <div className="flex space-x-2">
-                  <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
-                    Accept
+                <div className="flex-1">
+                  <p className="font-bold text-gray-900">{inv.teamName || 'Team Invitation'}</p>
+                  <p className="text-sm text-gray-500">You've been invited to join {inv.teamName ? <span className="font-semibold text-amber-700">{inv.teamName}</span> : 'a team'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAcceptInvitation(inv.id)}
+                    disabled={actionLoading === inv.id + '_accept'}
+                    className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5">
+                    {actionLoading === inv.id + '_accept' ? (
+                      <><div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />Accepting...</>
+                    ) : 'Accept'}
                   </button>
-                  <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium">
-                    Decline
+                  <button
+                    onClick={() => handleDeclineInvitation(inv.id)}
+                    disabled={actionLoading === inv.id + '_decline'}
+                    className="px-4 py-2 bg-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                    {actionLoading === inv.id + '_decline' ? (
+                      <><div className="w-3 h-3 rounded-full border-2 border-gray-400/30 border-t-gray-600 animate-spin" />Declining...</>
+                    ) : 'Decline'}
                   </button>
                 </div>
               </div>
@@ -148,79 +209,83 @@ export default function PlayerDashboard() {
         </div>
       )}
 
-      {/* Sport Profiles */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Sport Profiles</h2>
-          <Link
-            to="/stats"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            View All Stats
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sport Profiles */}
+        <div className="card p-6">
+          <div className="section-header">
+            <h2 className="section-title flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center text-primary-600">🎯</span>
+              Sport Profiles
+            </h2>
+            <Link to="/stats" className="text-sm font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+              View all →
+            </Link>
+          </div>
+
+          {stats?.sportProfiles && stats.sportProfiles.length > 0 ? (
+            <div className="space-y-3">
+              {stats.sportProfiles.map((profile: any) => {
+                const meta = SPORT_META[profile.sport] || SPORT_META.FOOTBALL;
+                return (
+                  <div key={profile.id}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border-2 border-transparent hover:border-gray-200 ${meta.bg} transition-all hover:scale-[1.01]`}>
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-xl shadow-sm`}>
+                      {meta.icon}
+                    </div>
+                    <div className="flex-1">
+                      <p className={`font-bold ${meta.text}`}>{profile.sport}</p>
+                      <p className="text-xs text-gray-500">Tap to view statistics</p>
+                    </div>
+                    <Link to="/stats" className={`px-3 py-1.5 rounded-xl bg-gradient-to-r ${meta.gradient} text-white text-xs font-bold hover:opacity-90 transition-opacity`}>
+                      Stats →
+                    </Link>
+                  </div>
+                );
+              })}
+              <Link to="/profile"
+                className="flex items-center justify-center gap-2 p-3 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-primary-300 hover:text-primary-600 transition-all text-sm font-medium">
+                + Add another sport
+              </Link>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl mb-4">🏅</div>
+              <p className="font-semibold text-gray-700 mb-1">No sport profiles yet</p>
+              <p className="text-sm text-gray-400 mb-4">Add a sport to start tracking your performance</p>
+              <Link to="/profile"
+                className="px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white text-sm font-bold rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm">
+                Add Sport Profile
+              </Link>
+            </div>
+          )}
         </div>
-        
-        {stats?.sportProfiles && stats.sportProfiles.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {stats.sportProfiles.map((profile: any) => (
-              <div key={profile.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                <h3 className="font-semibold text-gray-900 mb-2">{profile.sport}</h3>
-                <div className="text-sm text-gray-600">
-                  <p>View detailed statistics →</p>
+
+        {/* Quick Actions */}
+        <div className="card p-6">
+          <div className="section-header">
+            <h2 className="section-title flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-ocean-100 flex items-center justify-center">⚡</span>
+              Quick Actions
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {QUICK_ACTIONS.map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="group flex flex-col gap-3 p-4 rounded-2xl border-2 border-transparent hover:border-gray-200 bg-gray-50 hover:bg-white hover:shadow-card transition-all duration-200"
+              >
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${action.gradient} flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform duration-200`}>
+                  {action.icon}
                 </div>
-              </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{action.label}</p>
+                  <p className="text-xs text-gray-400">{action.desc}</p>
+                </div>
+              </Link>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <p>No sport profiles yet. Add your first sport to get started!</p>
-          </div>
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link to="/teams" className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">My Teams</h3>
-              <p className="text-sm text-gray-600">View and manage teams</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/tournaments" className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Tournaments</h3>
-              <p className="text-sm text-gray-600">Browse and register</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/stats" className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">My Stats</h3>
-              <p className="text-sm text-gray-600">View performance</p>
-            </div>
-          </div>
-        </Link>
+        </div>
       </div>
     </div>
   );

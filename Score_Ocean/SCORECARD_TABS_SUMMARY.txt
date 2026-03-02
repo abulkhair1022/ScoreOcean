@@ -1,0 +1,99 @@
+╔══════════════════════════════════════════════════════════════╗
+║         TABBED SCORECARD FEATURE - COMPLETE ✅               ║
+╚══════════════════════════════════════════════════════════════╝
+
+WHAT WAS ADDED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Professional Tab Navigation
+   ┌─────────────────────────────────────────────────┐
+   │ [Home Team (176/8)] [Away Team (145/7)]        │
+   │      ↑ Active          ↑ Inactive               │
+   └─────────────────────────────────────────────────┘
+
+✅ Separate Scorecards for Each Team
+   • Home Tab: Home batting + Away bowling
+   • Away Tab: Away batting + Home bowling
+
+✅ Smart Data Filtering
+   • Shows only relevant team data
+   • Helpful empty state messages
+   • Real-time score in tab labels
+
+✅ Professional Styling
+   • Blue theme for home team
+   • Purple theme for away team
+   • Clean border-based design
+   • Smooth hover effects
+
+HOW IT LOOKS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌──────────────────────────────────────────────────────────┐
+│  Detailed Scorecard                                      │
+├──────────────────────────────────────────────────────────┤
+│  [Al Firdous Innings (176/8)] [Oman Innings (145/7)]   │
+│   ═══════════════════════                                │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  Al Firdous Batting                                      │
+│  ┌────────────────────────────────────────────────┐     │
+│  │ Batsman    │ R  │ B  │ 4s │ 6s │ SR     │     │
+│  ├────────────────────────────────────────────────┤     │
+│  │ Virat      │ 89 │ 47 │ 10 │ 2  │ 189.36 │     │
+│  │ Rohit      │ 45 │ 28 │ 6  │ 1  │ 160.71 │     │
+│  └────────────────────────────────────────────────┘     │
+│                                                          │
+│  Oman Bowling                                            │
+│  ┌────────────────────────────────────────────────┐     │
+│  │ Bowler  │ O  │ M │ R  │ W │ Econ  │           │
+│  ├────────────────────────────────────────────────┤     │
+│  │ Bumrah  │ 4.0│ 1 │ 24 │ 2 │ 6.00  │           │
+│  │ Shami   │ 3.2│ 0 │ 28 │ 1 │ 8.40  │           │
+│  └────────────────────────────────────────────────┘     │
+│                                                          │
+│  Ball-by-Ball Summary                                    │
+│  ┌────────────────────────────────────────────────┐     │
+│  │ Over 1 • Bumrah • 6 runs                       │     │
+│  │ [0][1][4][W][2][1]                             │     │
+│  └────────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────┘
+
+BENEFITS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOR USERS:
+  ✓ Easy to view each team's performance
+  ✓ Professional cricket scorecard experience
+  ✓ Clear separation between innings
+  ✓ Quick score reference in tabs
+  ✓ Intuitive navigation
+
+FOR PRESENTATION:
+  ✓ Matches ESPN Cricinfo layout
+  ✓ Matches Cricbuzz layout
+  ✓ Professional appearance
+  ✓ Easy to understand
+  ✓ Mobile-friendly
+
+TECHNICAL DETAILS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File Modified:  apps/frontend/src/pages/Match.tsx
+New State:      selectedScorecardTab ('home' | 'away')
+Lines Added:    ~200 lines
+Breaking:       No breaking changes
+Compatible:     All existing features work
+
+USAGE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Click "Home Team Innings" tab → See home batting
+2. Click "Away Team Innings" tab → See away batting
+3. Score shown in tab label (e.g., "176/8")
+4. Active tab highlighted with colored border
+5. Switch anytime during or after match
+
+STATUS: ✅ COMPLETE AND READY TO USE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -662,6 +662,216 @@ export class MatchService {
       scoreHistory,
     };
   }
+
+  /**
+   * Update match score (for live scoring)
+   */
+  async updateMatchScore(
+    matchId: string,
+    homeScore: number,
+    awayScore: number,
+    userId: string,
+    sportSpecificData?: any
+  ): Promise<Match> {
+    // Get match
+    const match = await this.getMatch(matchId);
+
+    // Verify user is host of one of the teams
+    const teamResult = await query(
+      'SELECT id FROM teams WHERE id IN ($1, $2) AND host_id = $3',
+      [match.homeTeamId, match.awayTeamId, userId]
+    );
+
+    if (teamResult.rows.length === 0) {
+      throw new AppError('Only team hosts can update match scores', 403);
+    }
+
+    // Validate scores
+    if (homeScore < 0 || awayScore < 0) {
+      throw new AppError('Scores cannot be negative', 400);
+    }
+
+    // Update match score with sport-specific data
+    await query(
+      'UPDATE matches SET home_score = $1, away_score = $2, sport_specific_data = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+      [homeScore, awayScore, sportSpecificData ? JSON.stringify(sportSpecificData) : null, matchId]
+    );
+
+    // Record score history
+    await query(
+      'INSERT INTO score_history (match_id, home_score, away_score, sport_specific_data, updated_by) VALUES ($1, $2, $3, $4, $5)',
+      [matchId, homeScore, awayScore, sportSpecificData ? JSON.stringify(sportSpecificData) : null, userId]
+    );
+
+    // Get updated match
+    const updatedMatch = await this.getMatch(matchId);
+
+    // Broadcast score update via WebSocket
+    websocketService.broadcastToRoom(`match:${matchId}`, 'match:score-update', {
+      matchId,
+      homeScore,
+      awayScore,
+      sportSpecificData,
+      timestamp: new Date(),
+    });
+
+    return updatedMatch;
+  }
+
+  /**
+   * Start a match
+   */
+  async startMatch(matchId: string, userId: string): Promise<Match> {
+    // Get match
+    const match = await this.getMatch(matchId);
+
+    // Verify user is host of one of the teams
+    const teamResult = await query(
+      'SELECT id FROM teams WHERE id IN ($1, $2) AND host_id = $3',
+      [match.homeTeamId, match.awayTeamId, userId]
+    );
+
+    if (teamResult.rows.length === 0) {
+      throw new AppError('Only team hosts can start the match', 403);
+    }
+
+    // Check if match is already started
+    if (match.status !== MatchStatus.SCHEDULED) {
+      throw new AppError(`Match is already ${match.status.toLowerCase()}`, 400);
+    }
+
+    // Update match status
+    await query(
+      'UPDATE matches SET status = $1, start_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [MatchStatus.IN_PROGRESS, matchId]
+    );
+
+    // Get updated match
+    const updatedMatch = await this.getMatch(matchId);
+
+    // Broadcast match started via WebSocket
+    websocketService.broadcastToRoom(`match:${matchId}`, 'match:started', {
+      matchId,
+      timestamp: new Date(),
+    });
+
+    return updatedMatch;
+  }
+
+  /**
+   * End a match
+   */
+  async endMatch(matchId: string, userId: string): Promise<Match> {
+    // Get match
+    const match = await this.getMatch(matchId);
+
+    // Verify user is host of one of the teams
+    const teamResult = await query(
+      'SELECT id FROM teams WHERE id IN ($1, $2) AND host_id = $3',
+      [match.homeTeamId, match.awayTeamId, userId]
+    );
+
+    if (teamResult.rows.length === 0) {
+      throw new AppError('Only team hosts can end the match', 403);
+    }
+
+    // Check if match is in progress
+    if (match.status !== MatchStatus.IN_PROGRESS) {
+      throw new AppError('Match must be in progress to end it', 400);
+    }
+
+    // Update match status
+    await query(
+      'UPDATE matches SET status = $1, end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [MatchStatus.COMPLETED, matchId]
+    );
+
+    // Get updated match
+    const updatedMatch = await this.getMatch(matchId);
+
+    // Broadcast match ended via WebSocket
+    websocketService.broadcastToRoom(`match:${matchId}`, 'match:ended', {
+      matchId,
+      finalScore: {
+        homeScore: updatedMatch.score.homeScore,
+        awayScore: updatedMatch.score.awayScore,
+      },
+      timestamp: new Date(),
+    });
+
+    return updatedMatch;
+  }
+
+  /**
+   * Get score history for a match
+   */
+  async getScoreHistory(matchId: string): Promise<any[]> {
+    const result = await query(
+      `SELECT sh.*, u.name as updated_by_name
+       FROM score_history sh
+       LEFT JOIN user_profiles u ON sh.updated_by = u.user_id
+       WHERE sh.match_id = $1
+       ORDER BY sh.timestamp DESC`,
+      [matchId]
+    );
+
+    return result.rows;
+  }
+
+  /**
+   * Get team rosters for a match
+   */
+  async getMatchRosters(matchId: string): Promise<any> {
+    // Get match details
+    const match = await this.getMatch(matchId);
+
+    // Get home team roster
+    const homeRosterResult = await query(
+      `SELECT u.id, COALESCE(up.name, u.email) AS name
+       FROM team_rosters tr
+       JOIN users u ON tr.player_id = u.id
+       LEFT JOIN user_profiles up ON u.id = up.user_id
+       WHERE tr.team_id = $1
+       ORDER BY up.name`,
+      [match.homeTeamId]
+    );
+
+    // Get away team roster
+    const awayRosterResult = await query(
+      `SELECT u.id, COALESCE(up.name, u.email) AS name
+       FROM team_rosters tr
+       JOIN users u ON tr.player_id = u.id
+       LEFT JOIN user_profiles up ON u.id = up.user_id
+       WHERE tr.team_id = $1
+       ORDER BY up.name`,
+      [match.awayTeamId]
+    );
+
+    // Get team names
+    const homeTeamResult = await query('SELECT name FROM teams WHERE id = $1', [match.homeTeamId]);
+    const awayTeamResult = await query('SELECT name FROM teams WHERE id = $1', [match.awayTeamId]);
+
+    return {
+      homeTeam: {
+        id: match.homeTeamId,
+        name: homeTeamResult.rows[0]?.name || 'Home Team',
+        players: homeRosterResult.rows.map(p => ({
+          id: p.id,
+          name: p.name,
+          jerseyNumber: null
+        }))
+      },
+      awayTeam: {
+        id: match.awayTeamId,
+        name: awayTeamResult.rows[0]?.name || 'Away Team',
+        players: awayRosterResult.rows.map(p => ({
+          id: p.id,
+          name: p.name,
+          jerseyNumber: null
+        }))
+      }
+    };
+  }
 }
 
 export const matchService = new MatchService();

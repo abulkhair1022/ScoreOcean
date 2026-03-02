@@ -4,137 +4,197 @@ import apiClient from '../api/client';
 
 function Login() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const response = await apiClient.post('/auth/login', formData);
-      
       if (response.data.success) {
         const { user, tokens } = response.data.data;
-        
-        // Store tokens and user data
         localStorage.setItem('accessToken', tokens.accessToken);
         localStorage.setItem('refreshToken', tokens.refreshToken);
         localStorage.setItem('user', JSON.stringify(user));
-        
-        // Redirect to home or dashboard
         navigate('/');
       }
     } catch (err: any) {
-      console.error('Login error:', err);
-      setError(
-        err.response?.data?.error?.message || 
-        'Login failed. Please check your credentials and try again.'
-      );
+      setError(err.response?.data?.error?.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-block">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
-          </Link>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-          <p className="text-gray-600">Sign in to your Score Ocean account</p>
-        </div>
+    <div className="min-h-screen flex bg-[#f8fafc]">
+      {/* Left panel - branding */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary-950 via-[#1a1040] to-[#0a1628]">
+        {/* Decorative blobs */}
+        <div className="absolute w-96 h-96 rounded-full opacity-20"
+          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)', top: '-80px', left: '-80px' }} />
+        <div className="absolute w-64 h-64 rounded-full opacity-15"
+          style={{ background: 'radial-gradient(circle, #06d5ef 0%, transparent 70%)', bottom: '10%', right: '-40px' }} />
+        <div className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+            backgroundSize: '32px 32px',
+          }} />
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary-500 to-ocean-500 flex items-center justify-center shadow-glow">
+              <span className="text-white font-black text-sm">SO</span>
+            </div>
+            <span className="text-white font-black text-2xl tracking-tight">Score<span className="gradient-text">Ocean</span></span>
+          </Link>
+
+          {/* Center content */}
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-4xl font-black text-white leading-tight mb-4" style={{ fontFamily: 'Syne, sans-serif' }}>
+                Welcome back,<br />
+                <span className="gradient-text">champion.</span>
+              </h2>
+              <p className="text-gray-400 text-lg leading-relaxed">
+                Sign in to track your performance, manage teams, and compete in tournaments.
+              </p>
+            </div>
+
+            {/* Feature list */}
+            <ul className="space-y-4">
+              {[
+                { icon: '📊', text: 'Real-time performance statistics' },
+                { icon: '🏆', text: 'Tournament management & fixtures' },
+                { icon: '⚡', text: 'Live match scoring & updates' },
+                { icon: '🎖️', text: 'Digital achievement certificates' },
+              ].map((f) => (
+                <li key={f.text} className="flex items-center gap-3 text-gray-300 text-sm">
+                  <span className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-base">{f.icon}</span>
+                  {f.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Bottom note */}
+          <p className="text-gray-500 text-xs">
+            &copy; 2026 Score Ocean &bull; India's Digital Sports Platform
+          </p>
+        </div>
+      </div>
+
+      {/* Right panel - form */}
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-8 lg:px-16 py-12">
+        <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 mb-10 lg:hidden">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-ocean-500 flex items-center justify-center">
+              <span className="text-white font-black text-xs">SO</span>
+            </div>
+            <span className="font-black text-xl text-gray-900">Score<span className="gradient-text">Ocean</span></span>
+          </div>
+
+          <div className="mb-8">
+            <h1 className="text-3xl font-black text-gray-900 mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>
+              Sign in
+            </h1>
+            <p className="text-gray-500">
+              New to Score Ocean?{' '}
+              <Link to="/register" className="text-primary-600 font-semibold hover:underline">
+                Create account
+              </Link>
+            </p>
+          </div>
+
           {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-start">
-              <svg className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span className="text-sm">{error}</span>
+            <div className="mb-6 flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700">
+              <div className="w-5 h-5 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium">{error}</p>
             </div>
           )}
-          
-          <form className="space-y-5" onSubmit={handleSubmit}>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                className="input-field"
                 placeholder="you@example.com"
                 disabled={loading}
               />
             </div>
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-                placeholder="Enter your password"
-                disabled={loading}
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-gray-700">Password</label>
+                <button type="button" className="text-xs text-primary-600 hover:underline font-medium">
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  className="input-field pr-12"
+                  placeholder="Enter your password"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  {showPass
+                    ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                    : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  }
+                </button>
+              </div>
             </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg font-semibold"
+              className="w-full py-4 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-bold rounded-2xl hover:from-primary-700 hover:to-primary-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-glow hover:-translate-y-0.5 active:translate-y-0 mt-2"
             >
               {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   Signing in...
                 </span>
-              ) : 'Sign In'}
+              ) : 'Sign In →'}
             </button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
+
+            <p className="text-center text-sm text-gray-500 pt-2">
               Don't have an account?{' '}
-              <Link to="/register" className="font-semibold text-blue-600 hover:text-blue-700">
-                Sign up
+              <Link to="/register" className="text-primary-600 font-semibold hover:underline">
+                Register for free
               </Link>
             </p>
-          </div>
-        </div>
-        
-        <div className="mt-6 text-center">
-          <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 font-medium">
-            ← Back to Home
-          </Link>
+          </form>
         </div>
       </div>
     </div>
