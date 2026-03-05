@@ -74,6 +74,7 @@ export interface Registration {
 export interface PlayerRegistration {
   id: string;
   tournamentId: string;
+  teamId?: string;
   playerId: string;
   status: RegistrationStatus;
   paymentId?: string;

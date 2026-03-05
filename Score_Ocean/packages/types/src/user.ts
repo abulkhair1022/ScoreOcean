@@ -35,6 +35,7 @@ export interface SportProfile {
   sport: Sport;
   statistics: SportStats;
   matchHistory: MatchParticipation[];
+  basePrice?: number | null;
 }
 
 export type SportStats = CricketStats | FootballStats | KabaddiStats | VolleyballStats;

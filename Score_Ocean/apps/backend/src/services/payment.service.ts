@@ -147,7 +147,7 @@ export class PaymentService {
 
     return {
       orderId: order.id,
-      amount: order.amount,
+      amount: Number(order.amount),
       currency: order.currency,
       keyId: config.payment.gatewayKey!,
     };

@@ -4,9 +4,20 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "module": "commonjs",
-    "target": "ES2022"
+    "target": "ES2022",
+    "strict": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false
   },
   "include": ["src/**/*"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
+  ],
   "references": [
     { "path": "../../packages/types" }
   ]
