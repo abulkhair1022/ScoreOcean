@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { query } from '../db/postgres';
+import { query, getClient } from '../db/postgres';
 import { config } from '../config';
 import { UserRole } from '@score-ocean/types';
 import { AppError } from '../middleware/errorHandler';
@@ -188,12 +188,14 @@ export class AuthService {
     // Hash password
     const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
 
-    // Start transaction
-    await query('BEGIN', []);
+    // Start transaction using a dedicated client
+    const client = await getClient();
 
     try {
+      await client.query('BEGIN');
+
       // Create user
-      const userResult = await query(
+      const userResult = await client.query(
         `INSERT INTO users (email, password_hash, role)
          VALUES ($1, $2, $3)
          RETURNING id, email, role, created_at, updated_at`,
@@ -203,7 +205,7 @@ export class AuthService {
       const user = userResult.rows[0];
 
       // Create user profile
-      await query(
+      await client.query(
         `INSERT INTO user_profiles (user_id, name, age, city, state, country, phone)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -219,15 +221,13 @@ export class AuthService {
 
       // If user role is TEAM, automatically create a team entity
       if (input.role === UserRole.TEAM) {
-        // Use the user's name as the team name
         const teamName = input.name.trim();
         const city = input.city?.trim() || '';
         const state = input.state?.trim() || '';
         const country = input.country?.trim() || 'India';
-        const sport = input.sport || 'CRICKET'; // Use provided sport or default to CRICKET
-        
-        // Create team
-        const teamResult = await query(
+        const sport = input.sport || 'CRICKET';
+
+        const teamResult = await client.query(
           `INSERT INTO teams (name, sport, host_id, city, state, country, statistics)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
@@ -244,8 +244,7 @@ export class AuthService {
 
         const teamId = teamResult.rows[0].id;
 
-        // Create sport profile for the team
-        await query(
+        await client.query(
           `INSERT INTO team_sport_profiles (team_id, sport, statistics)
            VALUES ($1, $2, $3)`,
           [
@@ -256,8 +255,7 @@ export class AuthService {
         );
       }
 
-      // Commit transaction
-      await query('COMMIT', []);
+      await client.query('COMMIT');
 
       // Generate tokens
       const tokens = this.generateTokens({
@@ -278,9 +276,10 @@ export class AuthService {
         tokens,
       };
     } catch (error) {
-      // Rollback transaction on error
-      await query('ROLLBACK', []);
+      await client.query('ROLLBACK');
       throw error;
+    } finally {
+      client.release();
     }
   }
 

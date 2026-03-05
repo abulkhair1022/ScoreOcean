@@ -53,7 +53,7 @@ export const authSchemas = {
       phone: {
         type: 'string' as const,
         required: false,
-        pattern: /^\+?[1-9]\d{1,14}$/,
+        pattern: /^\+?[\d\s\-().]{7,20}$/,
         message: 'Phone number must be in valid international format',
       },
     },
