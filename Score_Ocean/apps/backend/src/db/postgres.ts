@@ -8,6 +8,7 @@ const pool = new Pool({
   user: config.database.user,
   password: config.database.password,
   max: config.database.maxConnections,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {

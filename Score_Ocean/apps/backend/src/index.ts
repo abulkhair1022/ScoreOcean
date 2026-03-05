@@ -6,6 +6,7 @@ import { config } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { connectRedis } from './db/redis';
 import { testConnection } from './db/postgres';
+import { initializeDatabase } from './db/init';
 import { websocketService } from './services/websocket.service';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
@@ -99,6 +100,12 @@ async function startServer() {
     const dbConnected = await testConnection();
     if (dbConnected) {
       console.log('✓ PostgreSQL connected successfully');
+      // Auto-apply schema and migrations
+      try {
+        await initializeDatabase();
+      } catch (e) {
+        console.warn('⚠ Schema init warning:', e);
+      }
     } else {
       console.warn('⚠ PostgreSQL connection failed - some features may not work');
       console.warn('  Please ensure PostgreSQL is running and configured correctly');
