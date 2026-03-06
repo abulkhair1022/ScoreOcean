@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS teams (
   name VARCHAR(255) NOT NULL,
   sport VARCHAR(50) NOT NULL,
   host_id UUID REFERENCES users(id),
+  captain_id UUID REFERENCES users(id),
   city VARCHAR(100),
   state VARCHAR(100),
   country VARCHAR(100),
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS team_rosters (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
   player_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  sport VARCHAR(50),
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(team_id, player_id)
 );

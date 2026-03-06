@@ -8,6 +8,8 @@ export async function initializeDatabase() {
     await pool.query(schemaSQL);
 
     // Incremental migrations
+    await pool.query(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS captain_id UUID REFERENCES users(id)`);
+    await pool.query(`ALTER TABLE team_rosters ADD COLUMN IF NOT EXISTS sport VARCHAR(50)`);
     await pool.query(`ALTER TABLE sport_profiles ADD COLUMN IF NOT EXISTS base_price NUMERIC DEFAULT NULL`);
     await pool.query(`ALTER TABLE auction_players ADD COLUMN IF NOT EXISTS base_price_override NUMERIC DEFAULT NULL`);
     await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS competition_type VARCHAR(50) NOT NULL DEFAULT 'TOURNAMENT'`);
