@@ -404,6 +404,86 @@ export class AuthService {
       throw new AppError('Invalid or expired token.', 401);
     }
   }
+
+  /**
+   * Find or create a user from Google OAuth profile
+   */
+  async findOrCreateGoogleUser(profile: {
+    googleId: string;
+    email: string;
+    name: string;
+    avatar?: string;
+  }): Promise<{ user: any; tokens: AuthToken }> {
+    const normalizedEmail = profile.email.toLowerCase().trim();
+
+    // 1. Check if a user with this google_id already exists
+    let userResult = await query(
+      `SELECT u.id, u.email, u.role, up.name, u.avatar_url
+       FROM users u
+       LEFT JOIN user_profiles up ON u.id = up.user_id
+       WHERE u.google_id = $1`,
+      [profile.googleId]
+    );
+
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      const tokens = this.generateTokens({ userId: user.id, email: user.email, role: user.role });
+      return { user: { id: user.id, email: user.email, role: user.role, name: user.name, avatar: user.avatar_url }, tokens };
+    }
+
+    // 2. Check if a user with this email exists → link the Google account
+    userResult = await query(
+      `SELECT u.id, u.email, u.role, up.name
+       FROM users u
+       LEFT JOIN user_profiles up ON u.id = up.user_id
+       WHERE u.email = $1`,
+      [normalizedEmail]
+    );
+
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      // Link Google account to existing user
+      await query(
+        `UPDATE users SET google_id = $1, avatar_url = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+        [profile.googleId, profile.avatar || null, user.id]
+      );
+      const tokens = this.generateTokens({ userId: user.id, email: user.email, role: user.role });
+      return { user: { id: user.id, email: user.email, role: user.role, name: user.name, avatar: profile.avatar }, tokens };
+    }
+
+    // 3. Brand new user — create as PLAYER
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+
+      const newUser = await client.query(
+        `INSERT INTO users (email, password_hash, role, google_id, avatar_url)
+         VALUES ($1, NULL, $2, $3, $4)
+         RETURNING id, email, role`,
+        [normalizedEmail, UserRole.PLAYER, profile.googleId, profile.avatar || null]
+      );
+
+      const user = newUser.rows[0];
+
+      await client.query(
+        `INSERT INTO user_profiles (user_id, name) VALUES ($1, $2)`,
+        [user.id, profile.name]
+      );
+
+      await client.query('COMMIT');
+
+      const tokens = this.generateTokens({ userId: user.id, email: user.email, role: user.role });
+      return {
+        user: { id: user.id, email: user.email, role: user.role, name: profile.name, avatar: profile.avatar },
+        tokens,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export const authService = new AuthService();
