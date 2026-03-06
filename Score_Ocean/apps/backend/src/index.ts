@@ -103,8 +103,9 @@ async function startServer() {
       // Auto-apply schema and migrations
       try {
         await initializeDatabase();
+        console.log('✓ Database schema ready');
       } catch (e) {
-        console.warn('⚠ Schema init warning:', e);
+        console.error('✗ Schema init FAILED:', e);
       }
     } else {
       console.warn('⚠ PostgreSQL connection failed - some features may not work');
