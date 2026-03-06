@@ -169,7 +169,10 @@ export class AuthService {
     this.validatePassword(input.password);
     this.validateRole(input.role);
     this.validateName(input.name);
-    this.validateAge(input.age);
+    // Age only relevant for individual players, not teams/orgs
+    if (input.role === UserRole.PLAYER) {
+      this.validateAge(input.age);
+    }
     this.validatePhone(input.phone);
 
     // Normalize email to lowercase

@@ -280,6 +280,24 @@ CREATE INDEX IF NOT EXISTS idx_org_team_invitations_org ON org_team_invitations(
 -- Add organization_id to teams if not exists (for affiliation)
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES users(id);
 
+-- Team sport profiles table
+CREATE TABLE IF NOT EXISTS team_sport_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  sport VARCHAR(50) NOT NULL,
+  statistics JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(team_id, sport)
+);
+
+-- Add competition_type to tournaments if not exists
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS competition_type VARCHAR(50) NOT NULL DEFAULT 'TOURNAMENT';
+
+-- Add player_id and player_details to tournament_registrations for league/individual tournaments
+ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS player_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS player_details JSONB DEFAULT '{}';
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sport_profiles_user_sport ON sport_profiles(user_id, sport);

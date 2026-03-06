@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import apiClient from '../api/client';
 import socketService from '../services/socket';
+import { showToast } from '../utils/toast';
 
 function NotificationCenter() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -55,12 +56,21 @@ function NotificationCenter() {
   const handleNewNotification = (notification: any) => {
     setNotifications((prev) => [notification, ...prev]);
     setUnreadCount((prev) => prev + 1);
-    
+
+    // Show as toast
+    const msg = notification.message || notification.title || 'New notification';
+    const type = notification.type || '';
+    if (type.includes('ERROR') || type.includes('FAIL')) {
+      showToast.error(msg);
+    } else if (type.includes('WARN')) {
+      showToast.info(msg);
+    } else {
+      showToast.success(msg);
+    }
+
     // Play notification sound
     const audio = new Audio('/notification.mp3');
-    audio.play().catch(() => {
-      // Ignore if sound fails to play
-    });
+    audio.play().catch(() => {});
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
