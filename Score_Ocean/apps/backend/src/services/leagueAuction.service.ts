@@ -357,11 +357,11 @@ export async function placeLeagueBid(
     const maxSquad = auctionRes.rows[0]?.max_squad_size || 999;
     if (lt.players_acquired >= maxSquad) throw new Error('Max squad size reached');
 
-    // Record bid
+    // Record bid — team_id is NULL for league auctions (league_team_id holds the reference)
     const bidRes = await client.query(
       `INSERT INTO auction_bids (auction_id, player_id, team_id, amount, league_team_id)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [auctionId, playerId, leagueTeamId, amount, leagueTeamId]
+       VALUES ($1, $2, NULL, $3, $4) RETURNING *`,
+      [auctionId, playerId, amount, leagueTeamId]
     );
 
     // Update current bid on auction_players
@@ -701,6 +701,11 @@ export async function startAuction(auctionId: string, roleOrder: string[]): Prom
        AND player_role NOT IN (${roleOrder.map((_: any, j: number) => `$${j + 2}`).join(',')} )`,
     [auctionId, ...roleOrder.map((r: string) => r.toUpperCase())]
   );
+  // Mark auction as IN_PROGRESS so next-player works without re-starting
+  await query(
+    `UPDATE auctions SET status = 'IN_PROGRESS', updated_at = NOW() WHERE id = $1`,
+    [auctionId]
+  );
   return nextAuctionPlayer(auctionId);
 }
 
@@ -743,11 +748,11 @@ async function _finalizeLeagueSale(client: any, auctionId: string, cur: any): Pr
   );
   const totalBids = parseInt(bidCountRes.rows[0].cnt, 10);
 
-  // Store result
+  // Store result — team_id is NULL for league auctions (league_team_id holds the reference)
   await client.query(
     `INSERT INTO auction_results (auction_id, player_id, team_id, final_price, total_bids, league_team_id)
-     VALUES ($1, $2, $3, $4, $5, $3) ON CONFLICT DO NOTHING`,
-    [auctionId, cur.player_id, leagueTeamId, finalPrice, totalBids]
+     VALUES ($1, $2, NULL, $3, $4, $5) ON CONFLICT DO NOTHING`,
+    [auctionId, cur.player_id, finalPrice, totalBids, leagueTeamId]
   );
 
   // Notify player

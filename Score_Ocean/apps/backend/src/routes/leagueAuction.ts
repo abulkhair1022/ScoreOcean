@@ -27,9 +27,10 @@ const assertAuctionWindowOpen = async (auctionId: string): Promise<string | null
   if (!res.rows.length) return null;
   const now = new Date();
   const startDate = new Date(res.rows[0].start_date);
-  const regDeadline = new Date(res.rows[0].registration_deadline);
-  if (now <= regDeadline) return `Registration is still open until ${regDeadline.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}. Auction cannot run during registration.`;
-  if (now >= startDate) return `Tournament started on ${startDate.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}. Auction window has passed.`;
+  // Only block if tournament has already fully ended (start_date + 1 day grace)
+  const gracePeriod = new Date(startDate);
+  gracePeriod.setDate(gracePeriod.getDate() + 1);
+  if (now >= gracePeriod) return `Tournament started on ${startDate.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}. Auction window has passed.`;
   return null; // window is open
 };
 
@@ -62,15 +63,12 @@ router.post('/tournament/:tournamentId/create', authenticate, async (req: AuthRe
     if (!tRes.rows.length) { res.status(404).json({ error: 'Tournament not found' }); return; }
     if (tRes.rows[0].host_id !== req.user!.userId) { res.status(403).json({ error: 'Only tournament host can create an auction' }); return; }
 
-    // Enforce auction window: after registration closes, before tournament starts
+    // Enforce auction window: only block if tournament has already passed
     const now = new Date();
-    const regDeadline = new Date(tRes.rows[0].registration_deadline);
     const startDate   = new Date(tRes.rows[0].start_date);
-    if (now <= regDeadline) {
-      res.status(400).json({ error: `Registration is still open. Auction can only be created after ${regDeadline.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}.` });
-      return;
-    }
-    if (now >= startDate) {
+    const gracePeriod = new Date(startDate);
+    gracePeriod.setDate(gracePeriod.getDate() + 1);
+    if (now >= gracePeriod) {
       res.status(400).json({ error: `Tournament has already started. Auction must be set up before ${startDate.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}.` });
       return;
     }
@@ -328,8 +326,13 @@ router.post('/:id/next-player', authenticate, async (req: AuthRequest, res: Resp
     if (!await isAuctionHost(req.params.id, req.user!.userId)) {
       res.status(403).json({ error: 'Only host can advance the auction' }); return;
     }
-    const windowErr = await assertAuctionWindowOpen(req.params.id);
-    if (windowErr) { res.status(400).json({ error: windowErr }); return; }
+    // Only check window if auction hasn't started yet
+    const auctionStatusRes = await query('SELECT status FROM auctions WHERE id = $1', [req.params.id]);
+    const auctionStatus = auctionStatusRes.rows[0]?.status;
+    if (auctionStatus !== 'IN_PROGRESS') {
+      const windowErr = await assertAuctionWindowOpen(req.params.id);
+      if (windowErr) { res.status(400).json({ error: windowErr }); return; }
+    }
     const player = await la.nextAuctionPlayer(req.params.id);
     if (!player) { res.json({ completed: true, message: 'All players auctioned' }); return; }
     res.json(player);
@@ -346,8 +349,6 @@ router.post('/:id/bid', authenticate, async (req: AuthRequest, res: Response, _n
     if (!playerId || !leagueTeamId || !amount) {
       res.status(400).json({ error: 'playerId, leagueTeamId, amount required' }); return;
     }
-    const windowErr = await assertAuctionWindowOpen(req.params.id);
-    if (windowErr) { res.status(400).json({ error: windowErr }); return; }
     // Verify user is the manager of that league team
     const ltRes = await query(
       `SELECT lt.* FROM league_teams lt WHERE lt.id = $1 AND lt.host_user_id = $2`,
@@ -369,8 +370,6 @@ router.post('/:id/sell', authenticate, async (req: AuthRequest, res: Response, _
     if (!await isAuctionHost(req.params.id, req.user!.userId)) {
       res.status(403).json({ error: 'Only host can sell a player' }); return;
     }
-    const windowErr = await assertAuctionWindowOpen(req.params.id);
-    if (windowErr) { res.status(400).json({ error: windowErr }); return; }
     const result = await la.sellCurrentPlayer(req.params.id);
     res.json(result);
   } catch (e: any) { res.status(400).json({ error: e.message }); }
@@ -385,8 +384,6 @@ router.post('/:id/unsold', authenticate, async (req: AuthRequest, res: Response,
     if (!await isAuctionHost(req.params.id, req.user!.userId)) {
       res.status(403).json({ error: 'Only host can mark a player unsold' }); return;
     }
-    const windowErr = await assertAuctionWindowOpen(req.params.id);
-    if (windowErr) { res.status(400).json({ error: windowErr }); return; }
     await la.markPlayerUnsold(req.params.id);
     res.json({ message: 'Player marked unsold' });
   } catch (e: any) { res.status(400).json({ error: e.message }); }

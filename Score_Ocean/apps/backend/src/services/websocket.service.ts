@@ -172,20 +172,24 @@ export class WebSocketService {
     this.storeConnection(userId, socketId);
 
     // Handle room subscriptions
-    socket.on('subscribe:match', (matchId: string) => {
-      this.subscribeToMatch(socket, matchId);
+    socket.on('subscribe:match', (data: string | { matchId: string }) => {
+      const matchId = typeof data === 'string' ? data : data?.matchId;
+      if (matchId) this.subscribeToMatch(socket, matchId);
     });
 
-    socket.on('unsubscribe:match', (matchId: string) => {
-      this.unsubscribeFromMatch(socket, matchId);
+    socket.on('unsubscribe:match', (data: string | { matchId: string }) => {
+      const matchId = typeof data === 'string' ? data : data?.matchId;
+      if (matchId) this.unsubscribeFromMatch(socket, matchId);
     });
 
-    socket.on('subscribe:auction', (auctionId: string) => {
-      this.subscribeToAuction(socket, auctionId);
+    socket.on('subscribe:auction', (data: string | { auctionId: string }) => {
+      const auctionId = typeof data === 'string' ? data : data?.auctionId;
+      if (auctionId) this.subscribeToAuction(socket, auctionId);
     });
 
-    socket.on('unsubscribe:auction', (auctionId: string) => {
-      this.unsubscribeFromAuction(socket, auctionId);
+    socket.on('unsubscribe:auction', (data: string | { auctionId: string }) => {
+      const auctionId = typeof data === 'string' ? data : data?.auctionId;
+      if (auctionId) this.unsubscribeFromAuction(socket, auctionId);
     });
 
     socket.on('subscribe:tournament', (tournamentId: string) => {

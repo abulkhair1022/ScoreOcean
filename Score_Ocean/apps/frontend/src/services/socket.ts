@@ -6,11 +6,18 @@ class SocketService {
   private maxReconnectAttempts = 5;
 
   connect(): Socket {
+    const token = localStorage.getItem('accessToken');
+
+    // If already connected with a valid token, reuse
     if (this.socket?.connected) {
       return this.socket;
     }
 
-    const token = localStorage.getItem('accessToken');
+    // If socket exists but disconnected (e.g. token expired), destroy and recreate
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
     // In dev, route through Vite proxy (/socket.io is proxied to :3000 with ws:true).
     // In prod, use VITE_API_URL base or same origin.
     const socketUrl = import.meta.env.PROD
