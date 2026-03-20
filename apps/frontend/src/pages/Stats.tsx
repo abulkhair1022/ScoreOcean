@@ -4,33 +4,171 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import apiClient from '../api/client';
 import Navbar from '../components/Layout/Navbar';
 
-const SPORT_META: Record<string, { icon: string; gradient: string; bg: string; text: string; border: string; color: string }> = {
-  CRICKET:    { icon: '🏏', gradient: 'from-green-500 to-emerald-600',  bg: 'bg-green-50',   text: 'text-green-700',   border: 'border-green-200',  color: '#10b981' },
-  FOOTBALL:   { icon: '⚽', gradient: 'from-blue-500 to-indigo-600',   bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',   color: '#6366f1' },
-  KABADDI:    { icon: '🤼', gradient: 'from-amber-500 to-orange-600',  bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',  color: '#f59e0b' },
-  VOLLEYBALL: { icon: '🏐', gradient: 'from-rose-500 to-pink-600',     bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',   color: '#f43f5e' },
-  BASKETBALL: { icon: '🏀', gradient: 'from-orange-500 to-red-600',    bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200', color: '#f97316' },
-  BADMINTON:  { icon: '🏸', gradient: 'from-teal-500 to-cyan-600',     bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',   color: '#14b8a6' },
+const SPORT_META: Record<string, { icon: string; accent: string; border: string; bg: string; color: string }> = {
+  CRICKET:    { icon: '🏏', accent: '#90e0ef', border: 'rgba(144,224,239,0.3)',  bg: 'rgba(144,224,239,0.07)', color: '#90e0ef' },
+  FOOTBALL:   { icon: '⚽', accent: '#00b4d8', border: 'rgba(0,180,216,0.3)',    bg: 'rgba(0,180,216,0.07)',   color: '#00b4d8' },
+  KABADDI:    { icon: '🤼', accent: '#48cae4', border: 'rgba(72,202,228,0.3)',   bg: 'rgba(72,202,228,0.07)',  color: '#48cae4' },
+  VOLLEYBALL: { icon: '🏐', accent: '#caf0f8', border: 'rgba(202,240,248,0.25)', bg: 'rgba(202,240,248,0.05)', color: '#caf0f8' },
+  BASKETBALL: { icon: '🏀', accent: '#0096c7', border: 'rgba(0,150,199,0.3)',    bg: 'rgba(0,150,199,0.07)',   color: '#0096c7' },
+  BADMINTON:  { icon: '🏸', accent: '#0077b6', border: 'rgba(0,119,182,0.3)',    bg: 'rgba(0,119,182,0.07)',   color: '#0077b6' },
 };
 
-interface SportProfile {
-  id: string;
-  sport: string;
-  statistics: Record<string, any>;
-  createdAt: string;
+const tooltipStyle = {
+  background: 'rgba(10,22,40,0.95)', border: '1px solid rgba(0,180,216,0.2)',
+  borderRadius: 10, fontSize: 12, color: '#f8fafc',
+  boxShadow: '0 4px 20px rgba(3,4,94,0.6)',
+};
+
+interface SportProfile { id: string; sport: string; statistics: Record<string, any>; createdAt: string; }
+
+const S = `
+@keyframes spin  { to { transform:rotate(360deg); } }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+@keyframes fadeUp{ from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+.st-root { min-height:100vh; }
+.st-main { max-width:1024px; margin:0 auto; padding:32px 24px; display:flex; flex-direction:column; gap:20px; }
+
+.st-hero {
+  position:relative; overflow:hidden; border-radius:18px; padding:40px 36px;
+  background-color:#020817;
+  background-image:
+    radial-gradient(ellipse 80% 80% at 0% 0%, rgba(0,119,182,0.4) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 60% at 100% 100%, rgba(0,180,216,0.15) 0%, transparent 60%);
+  border:1px solid rgba(0,180,216,0.2); animation:fadeUp 0.4s ease both;
 }
+.st-hero-grid {
+  position:absolute; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,180,216,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,180,216,0.04) 1px,transparent 1px);
+  background-size:40px 40px;
+}
+.st-hero-orb { position:absolute; border-radius:50%; filter:blur(50px); pointer-events:none; }
+.st-hero-sub   { font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:rgba(0,180,216,0.7); margin-bottom:6px; }
+.st-hero-title { font-family:'Barlow Condensed',sans-serif; font-size:40px; font-weight:900; color:#f8fafc; text-transform:uppercase; letter-spacing:0.02em; line-height:1; margin-bottom:10px; }
+.st-hero-p     { font-size:14px; font-weight:300; color:rgba(248,250,252,0.5); max-width:480px; line-height:1.6; }
+
+.st-section { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:24px; backdrop-filter:blur(12px); }
+.st-section-title { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:#f8fafc; margin-bottom:16px; }
+
+.st-stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+@media(min-width:768px){ .st-stats-grid-4 { grid-template-columns:repeat(4,1fr) !important; } }
+.st-stats-grid-3 { grid-template-columns:repeat(3,1fr); }
+
+.st-stat-card { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:20px; backdrop-filter:blur(12px); transition:transform 220ms,border-color 220ms; }
+.st-stat-card:hover { transform:translateY(-3px); border-color:rgba(0,180,216,0.3); }
+.st-stat-icon  { width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:14px; background:rgba(0,180,216,0.08); border:1px solid rgba(0,180,216,0.2); }
+.st-stat-value { font-family:'Barlow Condensed',sans-serif; font-size:34px; font-weight:900; color:#00b4d8; line-height:1; margin-bottom:4px; }
+.st-stat-label { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.4); }
+
+.st-error { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); color:#fca5a5; font-size:13px; }
+
+.st-empty { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:48px 32px; text-align:center; backdrop-filter:blur(12px); }
+.st-empty-icon  { font-size:40px; opacity:0.3; margin-bottom:14px; }
+.st-empty-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; text-transform:uppercase; letter-spacing:0.04em; color:rgba(248,250,252,0.6); margin-bottom:6px; }
+.st-empty-sub   { font-size:13px; color:rgba(248,250,252,0.3); margin-bottom:20px; }
+.st-empty-btn {
+  display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-radius:8px;
+  font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;
+  background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; border:none; cursor:pointer; text-decoration:none;
+  box-shadow:0 0 20px rgba(0,180,216,0.4); transition:transform 120ms,box-shadow 120ms;
+}
+.st-empty-btn:hover { transform:translateY(-2px); box-shadow:0 0 32px rgba(0,180,216,0.55); }
+
+.st-2col { display:grid; grid-template-columns:1fr; gap:16px; }
+@media(min-width:1024px){ .st-2col { grid-template-columns:1fr 2fr; } }
+
+.st-sport-btn {
+  width:100%; display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:10px;
+  background:rgba(0,180,216,0.04); border:1px solid rgba(0,180,216,0.1); cursor:pointer; text-align:left;
+  transition:border-color 150ms,background 150ms;
+}
+.st-sport-btn:hover   { border-color:rgba(0,180,216,0.25); background:rgba(0,180,216,0.07); }
+.st-sport-btn.active  { border-color:rgba(0,180,216,0.3); background:rgba(0,180,216,0.1); }
+.st-sport-icon { width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.st-sport-name { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:#f8fafc; }
+.st-sport-count{ font-size:11px; color:rgba(248,250,252,0.35); margin-top:2px; }
+.st-sport-dot  { width:8px; height:8px; border-radius:50%; margin-left:auto; flex-shrink:0; }
+
+.st-add-sport-link { display:flex; align-items:center; gap:6px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:rgba(0,180,216,0.6); text-decoration:none; padding-top:14px; margin-top:10px; border-top:1px solid rgba(0,180,216,0.1); transition:color 120ms; }
+.st-add-sport-link:hover { color:#00b4d8; }
+
+.st-detail-card { background:rgba(10,22,40,0.7); border-radius:14px; padding:24px; backdrop-filter:blur(12px); }
+.st-detail-header { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+.st-detail-icon  { width:52px; height:52px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+.st-detail-sport { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900; text-transform:uppercase; letter-spacing:0.04em; color:#f8fafc; }
+.st-detail-since { font-size:12px; color:rgba(248,250,252,0.35); margin-top:3px; }
+.st-chart-label  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.35); margin-bottom:12px; }
+.st-stats-cells  { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.st-stat-cell { padding:12px 14px; border-radius:8px; background:rgba(0,180,216,0.05); border:1px solid rgba(0,180,216,0.1); }
+.st-stat-cell-label { font-size:11px; color:rgba(248,250,252,0.35); text-transform:capitalize; margin-bottom:4px; }
+.st-stat-cell-value { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900; color:#00b4d8; }
+.st-no-stats { border-radius:10px; padding:20px; text-align:center; background:rgba(0,180,216,0.04); border:1px solid rgba(0,180,216,0.1); }
+
+.st-compete-card { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:18px 20px; display:flex; align-items:center; justify-content:space-between; gap:14px; backdrop-filter:blur(12px); }
+.st-compete-title { font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:#f8fafc; }
+.st-compete-sub   { font-size:12px; color:rgba(248,250,252,0.4); margin-top:3px; }
+.st-compete-btn {
+  padding:9px 18px; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;
+  background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; border:none; cursor:pointer; text-decoration:none; flex-shrink:0;
+  box-shadow:0 0 14px rgba(0,180,216,0.3); transition:transform 120ms,box-shadow 120ms;
+}
+.st-compete-btn:hover { transform:translateY(-1px); box-shadow:0 0 22px rgba(0,180,216,0.5); }
+
+.st-team-selector { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:16px; backdrop-filter:blur(12px); }
+.st-team-chip {
+  display:inline-flex; align-items:center; gap:8px; padding:7px 14px; border-radius:8px;
+  font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+  border:1px solid rgba(0,180,216,0.15); background:rgba(0,180,216,0.05); color:rgba(248,250,252,0.5);
+  cursor:pointer; transition:all 150ms;
+}
+.st-team-chip:hover  { border-color:rgba(0,180,216,0.3); color:#f8fafc; background:rgba(0,180,216,0.08); }
+.st-team-chip.active { border-color:rgba(0,180,216,0.4); background:rgba(0,180,216,0.12); color:#00b4d8; }
+
+.st-wld-bars { display:flex; flex-direction:column; gap:10px; flex:1; }
+.st-wld-bar-row { display:flex; flex-direction:column; gap:4px; }
+.st-wld-bar-label { display:flex; justify-content:space-between; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:rgba(248,250,252,0.5); }
+.st-wld-bar-track { height:6px; border-radius:9999px; background:rgba(0,180,216,0.1); overflow:hidden; }
+.st-wld-bar-fill  { height:100%; border-radius:9999px; }
+
+.st-sport-cell { padding:14px 16px; border-radius:10px; background:rgba(0,180,216,0.04); border:1px solid rgba(0,180,216,0.1); }
+.st-sport-cell-name  { font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
+.st-sport-cell-stats { font-size:11px; color:rgba(248,250,252,0.35); margin-top:4px; }
+
+.st-match-row {
+  display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:10px;
+  background:rgba(0,180,216,0.04); border:1px solid rgba(0,180,216,0.08);
+  transition:border-color 150ms,background 150ms; cursor:pointer;
+}
+.st-match-row:hover { border-color:rgba(0,180,216,0.25); background:rgba(0,180,216,0.07); }
+.st-match-icon { width:36px; height:36px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.st-match-name { font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.02em; color:#f8fafc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.st-match-meta { font-size:11px; color:rgba(248,250,252,0.35); margin-top:2px; }
+.st-match-score { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:900; color:#f8fafc; }
+.st-result-chip { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:900; flex-shrink:0; }
+.st-status-chip { padding:3px 8px; border-radius:4px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; }
+
+.st-overview-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+@media(min-width:768px){ .st-overview-grid { grid-template-columns:1fr 1fr; } }
+
+.st-table { width:100%; border-collapse:collapse; font-size:13px; }
+.st-table th { padding:10px 12px; text-align:left; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#00b4d8; background:rgba(0,180,216,0.06); border-bottom:1px solid rgba(0,180,216,0.15); }
+.st-table td { padding:12px 12px; color:rgba(248,250,252,0.6); border-bottom:1px solid rgba(0,180,216,0.08); transition:background 120ms; }
+.st-table tr:last-child td { border-bottom:none; }
+.st-table tbody tr:hover td { background:rgba(0,180,216,0.04); }
+.st-table td:first-child { font-weight:700; color:#f8fafc; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+`;
 
 function Stats() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser]           = useState<any>(null);
   const [sportProfiles, setSportProfiles] = useState<SportProfile[]>([]);
-  const [tournaments, setTournaments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [tournaments, setTournaments]     = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
-
-  // Team-specific stats
-  const [myTeams, setMyTeams] = useState<any[]>([]);
+  const [myTeams, setMyTeams]     = useState<any[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
   const [teamSports, setTeamSports] = useState<any[]>([]);
   const [teamMatches, setTeamMatches] = useState<any[]>([]);
@@ -39,26 +177,16 @@ function Stats() {
     const storedUser = localStorage.getItem('user');
     const accessToken = localStorage.getItem('accessToken');
     if (!storedUser || !accessToken) { navigate('/login'); return; }
-    const parsed = JSON.parse(storedUser);
-    setUser(parsed);
-    if (parsed.role === 'ORGANIZATION') {
-      fetchOrgStats();
-    } else if (parsed.role === 'TEAM') {
-      fetchTeamStats();
-    } else {
-      fetchStats();
-    }
+    const parsed = JSON.parse(storedUser); setUser(parsed);
+    if (parsed.role === 'ORGANIZATION') fetchOrgStats();
+    else if (parsed.role === 'TEAM') fetchTeamStats();
+    else fetchStats();
   }, [navigate]);
 
   const fetchOrgStats = async () => {
-    try {
-      setLoading(true);
-      const r = await apiClient.get('/tournaments');
-      const list = r.data?.data || r.data || [];
-      setTournaments(list);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load stats');
-    } finally { setLoading(false); }
+    try { setLoading(true); const r = await apiClient.get('/tournaments'); setTournaments(r.data?.data || r.data || []); }
+    catch (err: any) { setError(err.response?.data?.message || 'Failed to load stats'); }
+    finally { setLoading(false); }
   };
 
   const fetchTeamStats = async () => {
@@ -67,334 +195,272 @@ function Stats() {
       const r = await apiClient.get('/teams');
       const teams = r.data?.data || r.data || [];
       setMyTeams(Array.isArray(teams) ? teams : []);
-      if (teams.length > 0) {
-        await loadTeamStatsDetail(teams[0]);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load team stats');
-    } finally { setLoading(false); }
+      if (teams.length > 0) await loadTeamStatsDetail(teams[0]);
+    } catch (err: any) { setError(err.response?.data?.message || 'Failed to load team stats'); }
+    finally { setLoading(false); }
   };
 
   const loadTeamStatsDetail = async (team: any) => {
     setSelectedTeam(team);
     try {
-      const [sportsRes, matchesRes] = await Promise.allSettled([
-        apiClient.get(`/teams/${team.id}/sports`),
-        apiClient.get(`/matches/team/${team.id}`),
-      ]);
-      if (sportsRes.status === 'fulfilled') setTeamSports(sportsRes.value.data?.data || sportsRes.value.data || []);
-      if (matchesRes.status === 'fulfilled') {
-        const ml = matchesRes.value.data?.data || matchesRes.value.data || [];
-        setTeamMatches(Array.isArray(ml) ? ml : []);
-      }
-    } catch { /* ignore */ }
+      const [sR, mR] = await Promise.allSettled([apiClient.get(`/teams/${team.id}/sports`), apiClient.get(`/matches/team/${team.id}`)]);
+      if (sR.status === 'fulfilled') setTeamSports(sR.value.data?.data || sR.value.data || []);
+      if (mR.status === 'fulfilled') { const ml = mR.value.data?.data || mR.value.data || []; setTeamMatches(Array.isArray(ml) ? ml : []); }
+    } catch {}
   };
 
   const fetchStats = async () => {
     try {
       setLoading(true);
-      // Sync stats from match history into sport_profiles before reading them
-      try { await apiClient.post('/cricket-stats/recalculate'); } catch { /* ignore */ }
+      try { await apiClient.post('/cricket-stats/recalculate'); } catch {}
       const r = await apiClient.get('/users/profile');
       const profiles = r.data.sportProfiles || [];
       setSportProfiles(profiles);
       if (profiles.length > 0) setActiveProfile(profiles[0].id);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load statistics');
-    } finally { setLoading(false); }
+    } catch (err: any) { setError(err.response?.data?.message || 'Failed to load statistics'); }
+    finally { setLoading(false); }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div style={{ minHeight: '100vh' }}>
         <Navbar />
-        <div className="flex items-center justify-center min-h-[500px]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin" />
-            <p className="text-gray-500 text-sm">Loading stats...</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 500 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(0,180,216,0.2)', borderTopColor: '#00b4d8', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ color: 'rgba(248,250,252,0.45)', fontSize: 13, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Loading stats...</p>
           </div>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  const totalSportsTracked = sportProfiles.length;
-  const totalStatEntries = sportProfiles.reduce((acc, sp) => acc + Object.keys(sp.statistics || {}).length, 0);
   const displayName = user?.profile?.name || user?.name || user?.email?.split('@')[0] || 'Athlete';
-
   const currentProfile = sportProfiles.find(sp => sp.id === activeProfile) || sportProfiles[0];
 
-  // ── Team stats view ──────────────────────────────────────────────────────
-  if (user?.role === 'TEAM') {
-    const completedMatches = teamMatches.filter((m: any) => m.status === 'COMPLETED');
-    const wins = completedMatches.filter((m: any) => {
-      const isHome = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
-      const hs = m.homeScore ?? m.home_score ?? 0;
-      const as_ = m.awayScore ?? m.away_score ?? 0;
-      return (isHome && hs > as_) || (!isHome && as_ > hs);
-    }).length;
-    const losses = completedMatches.filter((m: any) => {
-      const isHome = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
-      const hs = m.homeScore ?? m.home_score ?? 0;
-      const as_ = m.awayScore ?? m.away_score ?? 0;
-      return (isHome && hs < as_) || (!isHome && as_ < hs);
-    }).length;
-    const draws = completedMatches.length - wins - losses;
-    const teamName = selectedTeam?.name || user?.name || 'Team';
+  const Hero = ({ sub, title, text }: { sub: string; title: string; text: string }) => (
+    <div className="st-hero">
+      <div className="st-hero-grid" />
+      <div className="st-hero-orb" style={{ width: 200, height: 200, background: 'radial-gradient(circle,rgba(0,180,216,0.18) 0%,transparent 70%)', top: -60, right: -40, animation: 'float 5s ease-in-out infinite' }} />
+      <div style={{ position: 'relative', zIndex: 10 }}>
+        <p className="st-hero-sub">{sub}</p>
+        <h1 className="st-hero-title">{title}</h1>
+        <p className="st-hero-p">{text}</p>
+      </div>
+    </div>
+  );
 
-    const chartData = teamSports.map((sp: any) => {
-      const stats = sp.statistics || sp.stats || {};
-      return { name: sp.sport.charAt(0) + sp.sport.slice(1).toLowerCase(), Played: stats.matchesPlayed || 0, Wins: stats.wins || 0 };
-    });
+  // ── Team view ──────────────────────────────────────────────────────────
+  if (user?.role === 'TEAM') {
+    const completed = teamMatches.filter((m: any) => m.status === 'COMPLETED');
+    const wins   = completed.filter((m: any) => { const ih = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id; const hs = m.homeScore ?? m.home_score ?? 0; const as_ = m.awayScore ?? m.away_score ?? 0; return (ih && hs > as_) || (!ih && as_ > hs); }).length;
+    const losses = completed.filter((m: any) => { const ih = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id; const hs = m.homeScore ?? m.home_score ?? 0; const as_ = m.awayScore ?? m.away_score ?? 0; return (ih && hs < as_) || (!ih && as_ < hs); }).length;
+    const draws  = completed.length - wins - losses;
+    const teamName = selectedTeam?.name || user?.name || 'Team';
+    const chartData = teamSports.map((sp: any) => { const s = sp.statistics || sp.stats || {}; return { name: sp.sport.charAt(0) + sp.sport.slice(1).toLowerCase(), Played: s.matchesPlayed || 0, Wins: s.wins || 0 }; });
 
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          {/* Header */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 p-8 text-white">
-            <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-            <div className="absolute w-48 h-48 rounded-full opacity-10 bg-white -top-12 -right-12 animate-float" />
-            <div className="relative z-10">
-              <p className="text-emerald-200 text-sm font-medium mb-1">Team Performance</p>
-              <h1 className="text-3xl md:text-4xl font-black mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>{teamName}'s Stats</h1>
-              <p className="text-emerald-100 max-w-lg">Track your team's match performance and sport profiles.</p>
-            </div>
-          </div>
+      <>
+        <style>{S}</style>
+        <div className="st-root">
+          <Navbar />
+          <main className="st-main">
+            <Hero sub="Team Performance" title={`${teamName}'s Stats`} text="Track your team's match performance and sport profiles." />
 
-          {/* Team selector */}
-          {myTeams.length > 1 && (
-            <div className="card p-4">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Select Team</p>
-              <div className="flex gap-2 flex-wrap">
-                {myTeams.map((t: any) => {
-                  const meta = SPORT_META[t.sport] || { bg: 'bg-gray-50', text: 'text-gray-700', icon: '🛡️', gradient: 'from-gray-400 to-slate-500', border: 'border-gray-200', color: '' };
-                  return (
-                    <button key={t.id} onClick={() => loadTeamStatsDetail(t)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-                        selectedTeam?.id === t.id ? `${meta.bg} ${meta.text} border-current` : 'bg-gray-50 text-gray-600 border-transparent hover:border-gray-200'
-                      }`}>
-                      <span>{meta.icon}</span> {t.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { icon: '⚔️', label: 'Matches Played', value: completedMatches.length, gradient: 'from-violet-500 to-purple-600', text: 'text-violet-600' },
-              { icon: '🏆', label: 'Wins',           value: wins,                    gradient: 'from-green-500 to-emerald-600', text: 'text-green-600'  },
-              { icon: '❌', label: 'Losses',          value: losses,                  gradient: 'from-rose-500 to-red-600',     text: 'text-rose-600'   },
-              { icon: '🤝', label: 'Draws',           value: draws,                   gradient: 'from-amber-500 to-orange-600', text: 'text-amber-600'  },
-            ].map((s) => (
-              <div key={s.label} className="card-hover p-5">
-                <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center text-xl mb-3 shadow-sm`}>{s.icon}</div>
-                <div className={`text-3xl font-black ${s.text} mb-0.5`}>{s.value}</div>
-                <div className="text-sm text-gray-500 font-medium">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {error && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-700 font-medium text-sm">{error}</p></div>}
-
-          {/* W/L/D Pie chart */}
-          {completedMatches.length > 0 && (
-            <div className="card p-6">
-              <h2 className="section-title mb-5">Win / Loss / Draw</h2>
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <ResponsiveContainer width={180} height={180}>
-                  <PieChart>
-                    <Pie data={[
-                      { name: 'Wins',   value: wins   || 0 },
-                      { name: 'Losses', value: losses || 0 },
-                      { name: 'Draws',  value: draws  || 0 },
-                    ].filter(d => d.value > 0)}
-                      cx="50%" cy="50%" innerRadius={50} outerRadius={80}
-                      paddingAngle={3} dataKey="value">
-                      <Cell fill="#10b981" />
-                      <Cell fill="#f43f5e" />
-                      <Cell fill="#9ca3af" />
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-col gap-3 flex-1">
-                  {[
-                    { label: 'Wins',   value: wins,   color: 'bg-emerald-500', pct: completedMatches.length ? Math.round((wins   / completedMatches.length) * 100) : 0 },
-                    { label: 'Losses', value: losses, color: 'bg-rose-500',    pct: completedMatches.length ? Math.round((losses / completedMatches.length) * 100) : 0 },
-                    { label: 'Draws',  value: draws,  color: 'bg-gray-400',    pct: completedMatches.length ? Math.round((draws  / completedMatches.length) * 100) : 0 },
-                  ].map(s => (
-                    <div key={s.label}>
-                      <div className="flex justify-between text-xs font-semibold text-gray-600 mb-1"><span>{s.label}</span><span>{s.value} ({s.pct}%)</span></div>
-                      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div className={`h-full rounded-full ${s.color}`} style={{ width: `${s.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs text-gray-400 pt-1">{completedMatches.length} completed match{completedMatches.length !== 1 ? 'es' : ''}</p>
+            {myTeams.length > 1 && (
+              <div className="st-team-selector">
+                <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(248,250,252,0.35)', marginBottom: 12 }}>Select Team</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {myTeams.map((t: any) => {
+                    const meta = SPORT_META[t.sport] || SPORT_META.FOOTBALL;
+                    return (
+                      <button key={t.id} onClick={() => loadTeamStatsDetail(t)}
+                        className={`st-team-chip${selectedTeam?.id === t.id ? ' active' : ''}`}
+                        style={selectedTeam?.id === t.id ? { borderColor: meta.border, color: meta.accent } : {}}>
+                        {meta.icon} {t.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Sport Profiles */}
-          {teamSports.length > 0 && (
-            <div className="card p-6">
-              <h2 className="section-title mb-5">Sport Profiles</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {teamSports.map((sp: any) => {
-                  const meta = SPORT_META[sp.sport] || { icon: '🏆', gradient: 'from-gray-400 to-slate-500', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', color: '#6366f1' };
-                  const stats = sp.statistics || sp.stats || {};
-                  const isPrimary = sp.sport === selectedTeam?.sport;
-                  return (
-                    <div key={sp.id || sp.sport} className={`p-4 rounded-2xl border-2 ${isPrimary ? `${meta.bg} border-current` : 'border-gray-100 bg-gray-50'}`}>
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-xl shadow-sm mb-3`}>{meta.icon}</div>
-                      <p className={`font-bold text-sm ${isPrimary ? meta.text : 'text-gray-800'}`}>{sp.sport}</p>
-                      {isPrimary && <p className="text-xs text-gray-400 mb-2">Primary</p>}
-                      <div className="mt-2 space-y-1">
-                        <p className="text-xs text-gray-500">{stats.matchesPlayed || 0} played</p>
-                        <p className="text-xs text-gray-500">{stats.wins || 0} wins · {stats.losses || 0} losses</p>
+            <div className={`st-stats-grid st-stats-grid-4`} style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+              {[
+                { icon: '⚔️', label: 'Matches Played', value: completed.length },
+                { icon: '🏆', label: 'Wins',           value: wins },
+                { icon: '❌', label: 'Losses',         value: losses },
+                { icon: '🤝', label: 'Draws',          value: draws },
+              ].map((s) => (
+                <div key={s.label} className="st-stat-card">
+                  <div className="st-stat-icon">{s.icon}</div>
+                  <div className="st-stat-value">{s.value}</div>
+                  <div className="st-stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {error && <div className="st-error"><span>⚠️</span><p>{error}</p></div>}
+
+            {completed.length > 0 && (
+              <div className="st-section">
+                <div className="st-section-title">Win / Loss / Draw</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={[{ name:'Wins',value:wins||0 },{ name:'Losses',value:losses||0 },{ name:'Draws',value:draws||0 }].filter(d=>d.value>0)} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                        <Cell fill="#00b4d8" /><Cell fill="#fca5a5" /><Cell fill="rgba(248,250,252,0.2)" />
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="st-wld-bars">
+                    {[
+                      { label: 'Wins',   value: wins,   fill: '#00b4d8', pct: completed.length ? Math.round((wins   / completed.length) * 100) : 0 },
+                      { label: 'Losses', value: losses, fill: '#fca5a5', pct: completed.length ? Math.round((losses / completed.length) * 100) : 0 },
+                      { label: 'Draws',  value: draws,  fill: 'rgba(248,250,252,0.3)', pct: completed.length ? Math.round((draws  / completed.length) * 100) : 0 },
+                    ].map(s => (
+                      <div key={s.label} className="st-wld-bar-row">
+                        <div className="st-wld-bar-label"><span>{s.label}</span><span style={{ color: s.fill }}>{s.value} ({s.pct}%)</span></div>
+                        <div className="st-wld-bar-track"><div className="st-wld-bar-fill" style={{ width: `${s.pct}%`, background: s.fill }} /></div>
                       </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                    <p style={{ fontSize: 11, color: 'rgba(248,250,252,0.25)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>{completed.length} completed matches</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Win/Loss chart */}
-          {chartData.length > 0 && chartData.some((d) => d.Played > 0 || d.Wins > 0) && (
-            <div className="card p-6">
-              <h2 className="section-title mb-5">Performance by Sport</h2>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 8 }} />
-                  <Bar dataKey="Played" fill="#d1fae5" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                  <Bar dataKey="Wins" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+            {teamSports.length > 0 && (
+              <div className="st-section">
+                <div className="st-section-title">Sport Profiles</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
+                  {teamSports.map((sp: any) => {
+                    const meta = SPORT_META[sp.sport] || SPORT_META.FOOTBALL;
+                    const stats = sp.statistics || sp.stats || {};
+                    const isPrimary = sp.sport === selectedTeam?.sport;
+                    return (
+                      <div key={sp.id || sp.sport} className="st-sport-cell" style={{ borderColor: isPrimary ? meta.border : 'rgba(0,180,216,0.1)', background: isPrimary ? meta.bg : 'rgba(0,180,216,0.03)' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 7, background: meta.bg, border: `1px solid ${meta.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 10 }}>{meta.icon}</div>
+                        <div className="st-sport-cell-name" style={{ color: isPrimary ? meta.accent : '#f8fafc' }}>{sp.sport}</div>
+                        {isPrimary && <div style={{ fontSize: 10, color: 'rgba(248,250,252,0.35)', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Primary</div>}
+                        <div className="st-sport-cell-stats">{stats.matchesPlayed || 0} played · {stats.wins || 0} wins</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-          {/* Monthly match activity line chart */}
-          {(() => {
-            if (teamMatches.length < 2) return null;
-            const byMonth: Record<string, { played: number; won: number }> = {};
-            teamMatches.forEach((m: any) => {
-              if (!m.created_at) return;
-              const key = new Date(m.created_at).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-              if (!byMonth[key]) byMonth[key] = { played: 0, won: 0 };
-              byMonth[key].played += 1;
-              if (m.status === 'COMPLETED') {
-                const isHome = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
-                const hs = m.homeScore ?? m.home_score ?? 0;
-                const as_ = m.awayScore ?? m.away_score ?? 0;
-                if ((isHome && hs > as_) || (!isHome && as_ > hs)) byMonth[key].won += 1;
-              }
-            });
-            const lineData = Object.entries(byMonth).reverse().map(([month, v]) => ({ month, ...v }));
-            if (lineData.length < 2) return null;
-            return (
-              <div className="card p-6">
-                <h2 className="section-title mb-5">Match Activity</h2>
+            {chartData.length > 0 && chartData.some(d => d.Played > 0 || d.Wins > 0) && (
+              <div className="st-section">
+                <div className="st-section-title">Performance by Sport</div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={lineData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} />
-                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                    <Line type="monotone" dataKey="played" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4, fill: '#6366f1' }} name="Played" />
-                    <Line type="monotone" dataKey="won"    stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} name="Won" />
-                  </LineChart>
+                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(0,180,216,0.05)', radius: 8 }} />
+                    <Bar dataKey="Played" fill="rgba(0,180,216,0.2)" radius={[6,6,0,0]} maxBarSize={40} />
+                    <Bar dataKey="Wins"   fill="#00b4d8"              radius={[6,6,0,0]} maxBarSize={40} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-            );
-          })()}
+            )}
 
-          {/* Recent Match History */}
-          {teamMatches.length > 0 && (
-            <div className="card p-6">
-              <h2 className="section-title mb-4">Recent Matches</h2>
-              <div className="space-y-3">
-                {teamMatches.slice(0, 10).map((m: any) => {
-                  const meta = SPORT_META[m.sport] || { icon: '🏆', gradient: 'from-gray-400 to-slate-500', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', color: '' };
-                  const isHome = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
-                  const hs = m.homeScore ?? m.home_score ?? 0;
-                  const as_ = m.awayScore ?? m.away_score ?? 0;
-                  const myScore = isHome ? hs : as_;
-                  const theirScore = isHome ? as_ : hs;
-                  const opponentName = isHome
-                    ? (m.away_team_name || m.awayTeamName || 'Opponent')
-                    : (m.home_team_name || m.homeTeamName || 'Opponent');
-                  const myTeamName = isHome
-                    ? (m.home_team_name || m.homeTeamName || selectedTeam?.name)
-                    : (m.away_team_name || m.awayTeamName || selectedTeam?.name);
-                  const venue = m.tournament_venue || m.venue || null;
-                  let result = ''; let resultColor = '';
-                  if (m.status === 'COMPLETED') {
-                    if (myScore > theirScore) { result = 'W'; resultColor = 'text-green-600 bg-green-100'; }
-                    else if (myScore < theirScore) { result = 'L'; resultColor = 'text-rose-600 bg-rose-100'; }
-                    else { result = 'D'; resultColor = 'text-gray-600 bg-gray-100'; }
-                  }
-                  return (
-                    <div key={m.id}
-                      onClick={() => navigate(`/matches/${m.id}`)}
-                      className="flex items-start gap-3 p-4 rounded-2xl bg-gray-50 hover:bg-white border-2 border-transparent hover:border-gray-100 hover:shadow-card transition-all cursor-pointer group">
-                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-sm shadow-sm flex-shrink-0 mt-0.5`}>{meta.icon}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black text-gray-900 truncate">
-                          {myTeamName} <span className="font-normal text-gray-400">vs</span> {opponentName}
-                        </p>
-                        <p className="text-xs font-semibold text-gray-500">{m.sport}</p>
-                        <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                          <span className="text-xs text-gray-400">📅 {m.created_at ? new Date(m.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</span>
-                          {venue && <span className="text-xs text-gray-400">📍 {venue}</span>}
+            {(() => {
+              if (teamMatches.length < 2) return null;
+              const byMonth: Record<string, { played: number; won: number }> = {};
+              teamMatches.forEach((m: any) => {
+                if (!m.created_at) return;
+                const key = new Date(m.created_at).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+                if (!byMonth[key]) byMonth[key] = { played: 0, won: 0 };
+                byMonth[key].played += 1;
+                if (m.status === 'COMPLETED') {
+                  const ih = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
+                  const hs = m.homeScore ?? m.home_score ?? 0; const as_ = m.awayScore ?? m.away_score ?? 0;
+                  if ((ih && hs > as_) || (!ih && as_ > hs)) byMonth[key].won += 1;
+                }
+              });
+              const lineData = Object.entries(byMonth).reverse().map(([month, v]) => ({ month, ...v }));
+              if (lineData.length < 2) return null;
+              return (
+                <div className="st-section">
+                  <div className="st-section-title">Match Activity</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={lineData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,180,216,0.08)" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8, color: 'rgba(248,250,252,0.5)' }} />
+                      <Line type="monotone" dataKey="played" stroke="#0077b6" strokeWidth={2.5} dot={{ r: 4, fill: '#0077b6' }} name="Played" />
+                      <Line type="monotone" dataKey="won"    stroke="#00b4d8" strokeWidth={2.5} dot={{ r: 4, fill: '#00b4d8' }} name="Won" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
+
+            {teamMatches.length > 0 && (
+              <div className="st-section">
+                <div className="st-section-title">Recent Matches</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {teamMatches.slice(0, 10).map((m: any) => {
+                    const meta = SPORT_META[m.sport] || SPORT_META.FOOTBALL;
+                    const ih = m.homeTeamId === selectedTeam?.id || m.home_team_id === selectedTeam?.id;
+                    const hs = m.homeScore ?? m.home_score ?? 0; const as_ = m.awayScore ?? m.away_score ?? 0;
+                    const myScore = ih ? hs : as_; const theirScore = ih ? as_ : hs;
+                    const opponentName = ih ? (m.away_team_name || m.awayTeamName || 'Opponent') : (m.home_team_name || m.homeTeamName || 'Opponent');
+                    const myTeamName  = ih ? (m.home_team_name || m.homeTeamName || selectedTeam?.name) : (m.away_team_name || m.awayTeamName || selectedTeam?.name);
+                    let result = '', rBg = '', rColor = '';
+                    if (m.status === 'COMPLETED') {
+                      if (myScore > theirScore)      { result='W'; rBg='rgba(0,180,216,0.12)';  rColor='#00b4d8'; }
+                      else if (myScore < theirScore) { result='L'; rBg='rgba(239,68,68,0.12)';  rColor='#fca5a5'; }
+                      else                           { result='D'; rBg='rgba(248,250,252,0.06)'; rColor='rgba(248,250,252,0.4)'; }
+                    }
+                    const statusBg = m.status === 'COMPLETED' ? 'rgba(248,250,252,0.06)' : m.status === 'IN_PROGRESS' ? 'rgba(0,180,216,0.12)' : 'rgba(144,224,239,0.1)';
+                    const statusColor = m.status === 'COMPLETED' ? 'rgba(248,250,252,0.4)' : m.status === 'IN_PROGRESS' ? '#00b4d8' : '#90e0ef';
+                    const statusLabel = m.status === 'COMPLETED' ? 'Done' : m.status === 'IN_PROGRESS' ? 'Live' : 'Scheduled';
+                    return (
+                      <div key={m.id} className="st-match-row" onClick={() => navigate(`/matches/${m.id}`)}>
+                        <div className="st-match-icon" style={{ background: meta.bg, border: `1px solid ${meta.border}` }}>{meta.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="st-match-name">{myTeamName} <span style={{ color: 'rgba(248,250,252,0.3)', fontWeight: 400 }}>vs</span> {opponentName}</div>
+                          <div className="st-match-meta">{m.sport} · {m.created_at ? new Date(m.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          {m.status === 'COMPLETED' && <span className="st-match-score">{myScore}–{theirScore}</span>}
+                          {result && <span className="st-result-chip" style={{ background: rBg, color: rColor }}>{result}</span>}
+                          <span className="st-status-chip" style={{ background: statusBg, color: statusColor }}>{statusLabel}</span>
+                          <svg width="14" height="14" fill="none" stroke="rgba(248,250,252,0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {m.status === 'COMPLETED' && <span className="text-sm font-black text-gray-700">{myScore}–{theirScore}</span>}
-                        {result && <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${resultColor}`}>{result}</span>}
-                        <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${m.status === 'COMPLETED' ? 'bg-gray-100 text-gray-600' : m.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'}`}>
-                          {m.status === 'COMPLETED' ? 'Done' : m.status === 'IN_PROGRESS' ? 'Live' : 'Scheduled'}
-                        </span>
-                        <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {teamMatches.length === 0 && teamSports.length === 0 && !error && (
-            <div className="card p-12 text-center">
-              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-4xl mx-auto mb-4">📊</div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">No stats yet</h3>
-              <p className="text-gray-500 mb-6">Add sports to your team and play matches to see stats here.</p>
-              <Link to="/teams" className="inline-flex px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-bold rounded-xl hover:from-emerald-700 transition-all shadow-sm">
-                Manage Teams →
-              </Link>
-            </div>
-          )}
-        </main>
-      </div>
+            {teamMatches.length === 0 && teamSports.length === 0 && !error && (
+              <div className="st-empty">
+                <div className="st-empty-icon">📊</div>
+                <div className="st-empty-title">No stats yet</div>
+                <div className="st-empty-sub">Add sports to your team and play matches to see stats here.</div>
+                <Link to="/teams" className="st-empty-btn">Manage Teams →</Link>
+              </div>
+            )}
+          </main>
+        </div>
+      </>
     );
   }
 
-  // ── Organisation stats view ──────────────────────────────────────────────
-  if (user?.role === 'ORGANIZATION' || user?.role === 'TEAM') {
+  // ── Org view ──────────────────────────────────────────────────────────
+  if (user?.role === 'ORGANIZATION') {
     const activeTournaments  = tournaments.filter((t: any) => ['ACTIVE','IN_PROGRESS','REGISTRATION_OPEN'].includes(t.status)).length;
     const totalRegistrations = tournaments.reduce((s: number, t: any) => s + (t.registrations?.length || t.currentTeams || 0), 0);
-    const totalRevenue       = tournaments.reduce((s: number, t: any) =>
-      s + (t.registrationFee || 0) * (t.registrations?.length || t.currentTeams || 0), 0);
+    const totalRevenue       = tournaments.reduce((s: number, t: any) => s + (t.registrationFee || 0) * (t.registrations?.length || t.currentTeams || 0), 0);
     const chartData = tournaments.slice(0, 8).map((t: any) => ({
       name: t.name.length > 14 ? t.name.slice(0, 12) + '…' : t.name,
       Registrations: t.registrations?.length || t.currentTeams || 0,
@@ -403,330 +469,258 @@ function Stats() {
     const orgName = user?.profile?.name || user?.name || user?.email?.split('@')[0] || 'Organization';
 
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          {/* Header */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-700 p-8 text-white">
-            <div className="absolute inset-0 opacity-[0.05]"
-              style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-            <div className="absolute w-48 h-48 rounded-full opacity-10 bg-white -top-12 -right-12 animate-float" />
-            <div className="relative z-10">
-              <p className="text-violet-200 text-sm font-medium mb-1">Organisation Dashboard</p>
-              <h1 className="text-3xl md:text-4xl font-black mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>{orgName}'s Stats</h1>
-              <p className="text-violet-100 max-w-lg">Overview of tournaments hosted, registrations and revenue.</p>
-            </div>
-          </div>
+      <>
+        <style>{S}</style>
+        <div className="st-root">
+          <Navbar />
+          <main className="st-main">
+            <Hero sub="Organisation Dashboard" title={`${orgName}'s Stats`} text="Overview of tournaments hosted, registrations and revenue." />
 
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="st-stats-grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+              {[
+                { icon: '🏆', label: 'Tournaments Hosted', value: tournaments.length },
+                { icon: '⚡', label: 'Active Events',       value: activeTournaments },
+                { icon: '📝', label: 'Registrations',       value: totalRegistrations },
+                { icon: '💰', label: 'Total Revenue',        value: `₹${(totalRevenue/1000).toFixed(1)}K` },
+              ].map((s) => (
+                <div key={s.label} className="st-stat-card">
+                  <div className="st-stat-icon">{s.icon}</div>
+                  <div className="st-stat-value">{s.value}</div>
+                  <div className="st-stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {error && <div className="st-error"><span>⚠️</span><p>{error}</p></div>}
+
+            {tournaments.length === 0 ? (
+              <div className="st-empty">
+                <div className="st-empty-icon">🏆</div>
+                <div className="st-empty-title">No tournaments hosted yet</div>
+                <div className="st-empty-sub">Create your first tournament to see stats here.</div>
+                <Link to="/tournaments" className="st-empty-btn">Go to Tournaments →</Link>
+              </div>
+            ) : (
+              <>
+                {chartData.length > 0 && (
+                  <div className="st-section">
+                    <div className="st-section-title">Registrations per Tournament</div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 40 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} angle={-30} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(0,180,216,0.05)', radius: 8 }} />
+                        <Bar dataKey="Registrations" fill="#0077b6" radius={[6,6,0,0]} maxBarSize={40} />
+                        <Bar dataKey="Capacity"      fill="rgba(0,180,216,0.15)" radius={[6,6,0,0]} maxBarSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <div className="st-section">
+                  <div className="st-section-title">All Tournaments</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="st-table">
+                      <thead>
+                        <tr>{['Name', 'Sport', 'Format', 'Status', 'Registrations', 'Fee'].map(h => <th key={h}>{h}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {tournaments.map((t: any) => {
+                          const regs = t.registrations?.length || t.currentTeams || 0;
+                          const cap  = t.teamCapacity || t.maxTeams || '—';
+                          const statusBg = t.status === 'REGISTRATION_OPEN' ? 'rgba(0,180,216,0.1)' : t.status === 'IN_PROGRESS' ? 'rgba(0,180,216,0.1)' : t.status === 'COMPLETED' ? 'rgba(248,250,252,0.06)' : 'rgba(144,224,239,0.08)';
+                          const statusColor = t.status === 'REGISTRATION_OPEN' ? '#00b4d8' : t.status === 'IN_PROGRESS' ? '#00b4d8' : t.status === 'COMPLETED' ? 'rgba(248,250,252,0.4)' : '#90e0ef';
+                          return (
+                            <tr key={t.id}>
+                              <td>{t.name}</td>
+                              <td>{t.sport}</td>
+                              <td>{t.format}</td>
+                              <td><span style={{ padding: '3px 8px', borderRadius: 4, fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: statusBg, color: statusColor }}>{t.status?.replace(/_/g, ' ')}</span></td>
+                              <td>{regs}/{cap}</td>
+                              <td>{t.registrationFee ? `₹${t.registrationFee}` : 'Free'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </main>
+        </div>
+      </>
+    );
+  }
+
+  // ── Player view ──────────────────────────────────────────────────────
+  const totalSportsTracked = sportProfiles.length;
+  const totalStatEntries   = sportProfiles.reduce((acc, sp) => acc + Object.keys(sp.statistics || {}).length, 0);
+
+  return (
+    <>
+      <style>{S}</style>
+      <div className="st-root">
+        <Navbar />
+        <main className="st-main">
+          <Hero sub="Performance Dashboard" title={`${displayName}'s Stats`} text="Track your athletic performance and progress across all sports you play." />
+
+          <div className="st-stats-grid st-stats-grid-3" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
             {[
-              { icon: '🏆', label: 'Tournaments Hosted', value: tournaments.length,  gradient: 'from-violet-500 to-purple-600', text: 'text-violet-600' },
-              { icon: '⚡', label: 'Active Events',       value: activeTournaments,   gradient: 'from-emerald-500 to-teal-600',  text: 'text-emerald-600' },
-              { icon: '📝', label: 'Total Registrations', value: totalRegistrations,  gradient: 'from-blue-500 to-indigo-600',   text: 'text-blue-600' },
-              { icon: '💰', label: 'Total Revenue',        value: `₹${(totalRevenue/1000).toFixed(1)}K`, gradient: 'from-amber-500 to-orange-600', text: 'text-amber-600' },
+              { icon: '🏅', label: 'Sports Tracked', value: totalSportsTracked },
+              { icon: '📊', label: 'Stats Recorded', value: totalStatEntries   },
+              { icon: '🏆', label: 'Tournaments',     value: 0                  },
             ].map((s) => (
-              <div key={s.label} className="card-hover p-5">
-                <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center text-xl mb-3 shadow-sm`}>{s.icon}</div>
-                <div className={`text-3xl font-black ${s.text} mb-0.5`}>{s.value}</div>
-                <div className="text-sm text-gray-500 font-medium">{s.label}</div>
+              <div key={s.label} className="st-stat-card">
+                <div className="st-stat-icon">{s.icon}</div>
+                <div className="st-stat-value">{s.value}</div>
+                <div className="st-stat-label">{s.label}</div>
               </div>
             ))}
           </div>
 
-          {error && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-              <p className="text-rose-700 font-medium text-sm">{error}</p>
-            </div>
-          )}
+          {error && <div className="st-error"><span>⚠️</span><p>{error}</p></div>}
 
-          {tournaments.length === 0 ? (
-            <div className="card p-12 text-center">
-              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-4xl mx-auto mb-4">🏆</div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">No tournaments hosted yet</h3>
-              <p className="text-gray-500 mb-6">Create your first tournament to see stats here.</p>
-              <Link to="/tournaments"
-                className="inline-flex px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-bold rounded-xl hover:from-violet-700 transition-all shadow-sm">
-                Go to Tournaments →
-              </Link>
+          {sportProfiles.length === 0 ? (
+            <div className="st-empty">
+              <div className="st-empty-icon">📊</div>
+              <div className="st-empty-title">No sport profiles yet</div>
+              <div className="st-empty-sub">Add sports to your profile to start tracking your performance statistics.</div>
+              <Link to="/profile" className="st-empty-btn">Go to Profile →</Link>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Registrations bar chart */}
-              {chartData.length > 0 && (
-                <div className="card p-6">
-                  <h2 className="section-title mb-5">Registrations per Tournament</h2>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 40 }}>
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} angle={-30} textAnchor="end" interval={0} />
-                      <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 8 }} />
-                      <Bar dataKey="Registrations" fill="#7c3aed" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="Capacity" fill="#e9d5ff" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+            <>
+              {sportProfiles.length >= 2 && (() => {
+                const overviewData = sportProfiles.map((sp) => ({
+                  name: sp.sport.charAt(0) + sp.sport.slice(1).toLowerCase(),
+                  Stats: Object.keys(sp.statistics || {}).length,
+                }));
+                return (
+                  <div className="st-section">
+                    <div className="st-section-title">Sports Overview</div>
+                    <div className="st-overview-grid">
+                      <div>
+                        <p className="st-chart-label">Stats Tracked per Sport</p>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <BarChart data={overviewData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(0,180,216,0.05)', radius: 8 }} />
+                            <Bar dataKey="Stats" fill="#0077b6" radius={[6,6,0,0]} maxBarSize={40} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div>
+                        <p className="st-chart-label">Distribution</p>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie data={overviewData.filter(d => d.Stats > 0)} cx="50%" cy="50%" outerRadius={65} dataKey="Stats" nameKey="name" paddingAngle={3}>
+                              {overviewData.map((_, i) => <Cell key={i} fill={['#0077b6','#00b4d8','#48cae4','#90e0ef','#caf0f8','#0096c7'][i%6]} />)}
+                            </Pie>
+                            <Tooltip contentStyle={tooltipStyle} />
+                            <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(248,250,252,0.5)' }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
-              {/* Tournament table */}
-              <div className="card p-6">
-                <h2 className="section-title mb-4">All Tournaments</h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        {['Name', 'Sport', 'Format', 'Status', 'Registrations', 'Fee'].map((h) => (
-                          <th key={h} className="text-left py-3 px-2 text-xs font-bold text-gray-400 uppercase tracking-wider">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {tournaments.map((t: any) => {
-                        const regs = t.registrations?.length || t.currentTeams || 0;
-                        const cap  = t.teamCapacity || t.maxTeams || '—';
-                        return (
-                          <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="py-3 px-2 font-semibold text-gray-900 max-w-[140px] truncate">{t.name}</td>
-                            <td className="py-3 px-2 text-gray-500">{t.sport}</td>
-                            <td className="py-3 px-2 text-gray-500">{t.format}</td>
-                            <td className="py-3 px-2">
-                              <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-                                t.status === 'REGISTRATION_OPEN' ? 'bg-emerald-100 text-emerald-700' :
-                                t.status === 'IN_PROGRESS'       ? 'bg-blue-100 text-blue-700' :
-                                t.status === 'COMPLETED'         ? 'bg-gray-100 text-gray-600' :
-                                'bg-violet-100 text-violet-700'
-                              }`}>{t.status?.replace(/_/g, ' ')}</span>
-                            </td>
-                            <td className="py-3 px-2 text-gray-700 font-semibold">{regs}/{cap}</td>
-                            <td className="py-3 px-2 text-gray-700">{t.registrationFee ? `₹${t.registrationFee}` : 'Free'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <div className="st-2col">
+                {/* Sport selector */}
+                <div className="st-section" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 20 }}>
+                  <div className="st-section-title">Your Sports</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {sportProfiles.map((sp) => {
+                      const meta = SPORT_META[sp.sport] || SPORT_META.FOOTBALL;
+                      const isActive = sp.id === activeProfile;
+                      return (
+                        <button key={sp.id} onClick={() => setActiveProfile(sp.id)}
+                          className={`st-sport-btn${isActive ? ' active' : ''}`}
+                          style={isActive ? { borderColor: meta.border, background: meta.bg } : {}}>
+                          <div className="st-sport-icon" style={{ background: meta.bg, border: `1px solid ${meta.border}` }}>{meta.icon}</div>
+                          <div>
+                            <div className="st-sport-name" style={isActive ? { color: meta.accent } : {}}>{sp.sport}</div>
+                            <div className="st-sport-count">{Object.keys(sp.statistics || {}).length} stats</div>
+                          </div>
+                          {isActive && <div className="st-sport-dot" style={{ background: meta.accent }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Link to="/profile" className="st-add-sport-link">+ Add Sport</Link>
+                </div>
+
+                {/* Detail panel */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {currentProfile && (() => {
+                    const meta = SPORT_META[currentProfile.sport] || SPORT_META.FOOTBALL;
+                    const stats = Object.entries(currentProfile.statistics || {});
+                    const numericStats = stats.filter(([,v]) => !isNaN(parseFloat(String(v))));
+                    const chartData = numericStats.map(([key, value]) => ({
+                      name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                      value: parseFloat(String(value)),
+                    }));
+                    return (
+                      <>
+                        <div className="st-detail-card" style={{ border: `1px solid ${meta.border}` }}>
+                          <div className="st-detail-header">
+                            <div className="st-detail-icon" style={{ background: meta.bg, border: `1px solid ${meta.border}` }}>{meta.icon}</div>
+                            <div>
+                              <div className="st-detail-sport" style={{ color: meta.accent }}>{currentProfile.sport}</div>
+                              <div className="st-detail-since">Tracking since {new Date(currentProfile.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</div>
+                            </div>
+                          </div>
+
+                          {stats.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                              {chartData.length > 0 && (
+                                <div>
+                                  <p className="st-chart-label">Performance Chart</p>
+                                  <ResponsiveContainer width="100%" height={180}>
+                                    <BarChart data={chartData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                                      <YAxis tick={{ fontSize: 10, fill: 'rgba(248,250,252,0.35)' }} axisLine={false} tickLine={false} />
+                                      <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(0,180,216,0.05)', radius: 8 }} />
+                                      <Bar dataKey="value" fill={meta.color} radius={[6,6,0,0]} maxBarSize={48} />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              )}
+                              <div className="st-stats-cells">
+                                {stats.map(([key, value]) => (
+                                  <div key={key} className="st-stat-cell" style={{ background: meta.bg, borderColor: meta.border }}>
+                                    <div className="st-stat-cell-label">{key.replace(/_/g, ' ')}</div>
+                                    <div className="st-stat-cell-value" style={{ color: meta.accent }}>{String(value)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="st-no-stats">
+                              <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: meta.accent }}>No stats recorded yet</p>
+                              <p style={{ fontSize: 12, color: 'rgba(248,250,252,0.3)', marginTop: 4 }}>Play matches to start building your stats</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="st-compete-card">
+                          <div>
+                            <div className="st-compete-title">Ready to compete?</div>
+                            <div className="st-compete-sub">Find {currentProfile.sport.toLowerCase()} tournaments near you</div>
+                          </div>
+                          <Link to="/tournaments" className="st-compete-btn">Find Tournaments →</Link>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
-            </div>
+            </>
           )}
         </main>
       </div>
-    );
-  }
-  // ── End org view ────────────────────────────────────────────────────────
-
-
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-
-        {/* Header Banner */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-700 via-primary-600 to-cyan-600 p-8 text-white">
-          <div className="absolute inset-0 opacity-[0.05]"
-            style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-          <div className="absolute w-48 h-48 rounded-full opacity-10 bg-white -top-12 -right-12 animate-float" />
-          <div className="relative z-10">
-            <p className="text-primary-200 text-sm font-medium mb-1">Performance Dashboard</p>
-            <h1 className="text-3xl md:text-4xl font-black mb-2" style={{ fontFamily: 'Syne, sans-serif' }}>{displayName}'s Stats</h1>
-            <p className="text-primary-100 max-w-lg">Track your athletic performance and progress across all sports you play.</p>
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {[
-            { icon: '🏅', label: 'Sports Tracked', value: totalSportsTracked, gradient: 'from-primary-500 to-indigo-600', text: 'text-primary-600' },
-            { icon: '📊', label: 'Stats Recorded', value: totalStatEntries,   gradient: 'from-emerald-500 to-teal-600',   text: 'text-emerald-600' },
-            { icon: '🏆', label: 'Tournaments',     value: 0,                  gradient: 'from-violet-500 to-purple-600',  text: 'text-violet-600' },
-          ].map((s) => (
-            <div key={s.label} className="card-hover p-5">
-              <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${s.gradient} flex items-center justify-center text-xl mb-3 shadow-sm`}>{s.icon}</div>
-              <div className={`text-3xl font-black ${s.text} mb-0.5`}>{s.value}</div>
-              <div className="text-sm text-gray-500 font-medium">{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-            <p className="text-rose-700 font-medium text-sm">{error}</p>
-          </div>
-        )}
-
-        {sportProfiles.length === 0 ? (
-          <div className="card p-12 text-center">
-            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-4xl mx-auto mb-4">📊</div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">No sport profiles yet</h3>
-            <p className="text-gray-500 mb-6">Add sports to your profile to start tracking your performance statistics.</p>
-            <Link to="/profile"
-              className="inline-flex px-5 py-2.5 bg-gradient-to-r from-primary-600 to-indigo-600 text-white text-sm font-bold rounded-xl hover:from-primary-700 transition-all shadow-sm">
-              Go to Profile →
-            </Link>
-          </div>
-        ) : (
-          <>
-            {/* Multi-sport overview (only if 2+ sports) */}
-            {sportProfiles.length >= 2 && (() => {
-              const overviewData = sportProfiles.map((sp) => ({
-                name: sp.sport.charAt(0) + sp.sport.slice(1).toLowerCase(),
-                Stats: Object.keys(sp.statistics || {}).length,
-                Value: Object.values(sp.statistics || {}).reduce((s: number, v: any) => s + (parseFloat(String(v)) || 0), 0),
-              }));
-              return (
-                <div className="card p-6">
-                  <h2 className="section-title mb-5">Sports Overview</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Stats Tracked per Sport</p>
-                      <ResponsiveContainer width="100%" height={160}>
-                        <BarChart data={overviewData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                          <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                          <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 8 }} />
-                          <Bar dataKey="Stats" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Distribution</p>
-                      <ResponsiveContainer width="100%" height={160}>
-                        <PieChart>
-                          <Pie data={overviewData.filter(d => d.Stats > 0)} cx="50%" cy="50%" outerRadius={65} dataKey="Stats" nameKey="name" paddingAngle={3}>
-                            {overviewData.map((_, i) => (
-                              <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#f97316', '#14b8a6'][i % 6]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px' }} />
-                          <Legend wrapperStyle={{ fontSize: '11px' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Sport Selector Sidebar */}
-            <div className="card p-5">
-              <h2 className="section-title mb-4">Your Sports</h2>
-              <div className="space-y-2">
-                {sportProfiles.map((sp) => {
-                  const meta = SPORT_META[sp.sport] || { icon: '🏆', gradient: 'from-gray-400 to-slate-500', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
-                  const isActive = sp.id === activeProfile;
-                  return (
-                    <button
-                      key={sp.id}
-                      onClick={() => setActiveProfile(sp.id)}
-                      className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all text-left ${
-                        isActive ? `${meta.border} ${meta.bg}` : 'border-transparent bg-gray-50 hover:bg-white hover:border-gray-200'
-                      }`}>
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-xl shadow-sm flex-shrink-0`}>
-                        {meta.icon}
-                      </div>
-                      <div>
-                        <p className={`font-bold text-sm ${isActive ? meta.text : 'text-gray-800'}`}>{sp.sport}</p>
-                        <p className="text-xs text-gray-400">{Object.keys(sp.statistics || {}).length} stats</p>
-                      </div>
-                      {isActive && (
-                        <div className={`w-2 h-2 rounded-full ml-auto flex-shrink-0 bg-gradient-to-br ${meta.gradient}`} />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <Link to="/profile" className="flex items-center gap-2 text-sm text-primary-600 font-semibold hover:text-primary-700 transition-colors">
-                  <span>+ Add Sport</span>
-                </Link>
-              </div>
-            </div>
-
-            {/* Stats Detail Panel */}
-            <div className="lg:col-span-2 space-y-4">
-              {currentProfile ? (() => {
-                const meta = SPORT_META[currentProfile.sport] || { icon: '🏆', gradient: 'from-gray-400 to-slate-500', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', color: '#6366f1' };
-                const stats = Object.entries(currentProfile.statistics || {});
-                return (
-                  <>
-                    <div className={`card p-6 border-l-4 ${meta.border}`}>
-                      <div className="flex items-center gap-4 mb-6">
-                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-2xl shadow-sm`}>
-                          {meta.icon}
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-black text-gray-900" style={{ fontFamily: 'Syne, sans-serif' }}>{currentProfile.sport}</h2>
-                          <p className="text-sm text-gray-400">
-                            Tracking since {new Date(currentProfile.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-                          </p>
-                        </div>
-                      </div>
-
-                      {stats.length > 0 ? (() => {
-                        const numericStats = stats.filter(([, v]) => !isNaN(parseFloat(String(v))));
-                        const chartData = numericStats.map(([key, value]) => ({
-                          name: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-                          value: parseFloat(String(value)),
-                        }));
-                        const barColor = meta.color || '#6366f1';
-                        return (
-                          <div className="space-y-5">
-                            {chartData.length > 0 && (
-                              <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Performance Chart</p>
-                                <ResponsiveContainer width="100%" height={180}>
-                                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                    <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                    <Tooltip
-                                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: '12px', padding: '8px 12px' }}
-                                      cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 8 }}
-                                    />
-                                    <Bar dataKey="value" fill={barColor} radius={[6, 6, 0, 0]} maxBarSize={48} />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-3">
-                              {stats.map(([key, value]) => (
-                                <div key={key} className={`p-3 rounded-2xl ${meta.bg}`}>
-                                  <p className="text-xs text-gray-400 capitalize mb-0.5">{key.replace(/_/g, ' ')}</p>
-                                  <p className={`text-xl font-black ${meta.text}`}>{String(value)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })() : (
-                        <div className={`rounded-2xl ${meta.bg} p-6 text-center`}>
-                          <p className={`text-sm font-semibold ${meta.text}`}>No stats recorded yet</p>
-                          <p className="text-xs text-gray-400 mt-1">Play matches to start building your stats</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick nav to find tournaments */}
-                    <div className="card p-5 flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-gray-900">Ready to compete?</p>
-                        <p className="text-sm text-gray-500">Find {currentProfile.sport.toLowerCase()} tournaments near you</p>
-                      </div>
-                      <Link to="/tournaments"
-                        className={`px-5 py-2.5 bg-gradient-to-r ${meta.gradient} text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-sm flex-shrink-0`}>
-                        Find Tournaments →
-                      </Link>
-                    </div>
-                  </>
-                );
-              })() : null}
-            </div>
-            </div>
-          </>
-        )}
-      </main>
-    </div>
+    </>
   );
 }
 

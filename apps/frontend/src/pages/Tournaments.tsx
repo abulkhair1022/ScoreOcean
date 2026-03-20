@@ -4,68 +4,40 @@ import { useEffect, useState } from 'react';
 import apiClient from '../api/client';
 import Navbar from '../components/Layout/Navbar';
 
-const SPORT_META: Record<string, { icon: string; gradient: string; bg: string; text: string }> = {
-  CRICKET:    { icon: '🏏', gradient: 'from-primary-400 to-primary-500', bg: 'bg-primary-50',   text: 'text-primary-700'  },
-  FOOTBALL:   { icon: '⚽', gradient: 'from-primary-600 to-primary-700',  bg: 'bg-primary-100',    text: 'text-primary-800'   },
-  KABADDI:    { icon: '🤼', gradient: 'from-primary-300 to-primary-400', bg: 'bg-primary-50',   text: 'text-primary-600'  },
-  VOLLEYBALL: { icon: '🏐', gradient: 'from-primary-200 to-primary-300',    bg: 'bg-primary-50',    text: 'text-primary-600'   },
-  BASKETBALL: { icon: '🏀', gradient: 'from-primary-500 to-primary-600',   bg: 'bg-primary-100',  text: 'text-primary-700' },
+const SPORT_META: Record<string, { icon: string; accent: string; border: string; bg: string }> = {
+  CRICKET:    { icon: '🏏', accent: '#90e0ef', border: 'rgba(144,224,239,0.3)',  bg: 'rgba(144,224,239,0.07)' },
+  FOOTBALL:   { icon: '⚽', accent: '#00b4d8', border: 'rgba(0,180,216,0.3)',    bg: 'rgba(0,180,216,0.07)'   },
+  KABADDI:    { icon: '🤼', accent: '#48cae4', border: 'rgba(72,202,228,0.3)',   bg: 'rgba(72,202,228,0.07)'  },
+  VOLLEYBALL: { icon: '🏐', accent: '#caf0f8', border: 'rgba(202,240,248,0.25)', bg: 'rgba(202,240,248,0.05)' },
+  BASKETBALL: { icon: '🏀', accent: '#0096c7', border: 'rgba(0,150,199,0.3)',    bg: 'rgba(0,150,199,0.07)'   },
 };
 
-const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  REGISTRATION_OPEN:   { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Registration Open'   },
-  REGISTRATION_CLOSED: { bg: 'bg-primary-100',  text: 'text-primary-700',  dot: 'bg-primary-500',  label: 'Registration Closed' },
-  ONGOING:             { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500',    label: 'Ongoing'             },
-  IN_PROGRESS:         { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500',    label: 'In Progress'         },
-  AUCTION_PENDING:     { bg: 'bg-primary-100',   text: 'text-primary-700',   dot: 'bg-primary-500',   label: '🔨 Auction Pending'  },
-  COMPLETED:           { bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400',    label: 'Completed'           },
-  ACTIVE:              { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Active'              },
-  UPCOMING:            { bg: 'bg-violet-100',  text: 'text-violet-700',  dot: 'bg-violet-500',  label: 'Upcoming'            },
-  CANCELLED:           { bg: 'bg-rose-100',    text: 'text-rose-700',    dot: 'bg-rose-500',    label: 'Cancelled'           },
-  DRAFT:               { bg: 'bg-primary-100',   text: 'text-primary-700',   dot: 'bg-primary-500',   label: 'Draft'               },
+const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string; label: string }> = {
+  REGISTRATION_OPEN:   { bg: 'rgba(0,180,216,0.1)',    color: '#00b4d8', dot: '#00b4d8', label: 'Registration Open'   },
+  REGISTRATION_CLOSED: { bg: 'rgba(0,119,182,0.1)',    color: '#0077b6', dot: '#0077b6', label: 'Registration Closed' },
+  ONGOING:             { bg: 'rgba(0,180,216,0.1)',    color: '#00b4d8', dot: '#00b4d8', label: 'Ongoing'             },
+  IN_PROGRESS:         { bg: 'rgba(0,180,216,0.1)',    color: '#00b4d8', dot: '#00b4d8', label: 'In Progress'         },
+  AUCTION_PENDING:     { bg: 'rgba(251,191,36,0.1)',   color: '#fbbf24', dot: '#fbbf24', label: '🔨 Auction Pending'  },
+  COMPLETED:           { bg: 'rgba(248,250,252,0.06)', color: 'rgba(248,250,252,0.4)', dot: 'rgba(248,250,252,0.3)', label: 'Completed' },
+  ACTIVE:              { bg: 'rgba(0,180,216,0.1)',    color: '#00b4d8', dot: '#00b4d8', label: 'Active'              },
+  UPCOMING:            { bg: 'rgba(144,224,239,0.1)',  color: '#90e0ef', dot: '#90e0ef', label: 'Upcoming'            },
+  CANCELLED:           { bg: 'rgba(239,68,68,0.1)',    color: '#fca5a5', dot: '#ef4444', label: 'Cancelled'           },
+  DRAFT:               { bg: 'rgba(248,250,252,0.05)', color: 'rgba(248,250,252,0.3)', dot: 'rgba(248,250,252,0.25)', label: 'Draft' },
 };
 
 const getEffectiveStatusKey = (t: any): string => {
   const dbStatus = t.status || 'UPCOMING';
-  // Terminal states — keep as-is
   if (['COMPLETED', 'CANCELLED', 'DRAFT', 'IN_PROGRESS'].includes(dbStatus)) return dbStatus;
   const now = Date.now();
   const dates = t.dates || {};
-  const startDate = dates.startDate || t.startDate;
-  const endDate   = dates.endDate   || t.endDate;
+  const startDate   = dates.startDate   || t.startDate;
+  const endDate     = dates.endDate     || t.endDate;
   const regDeadline = dates.registrationDeadline || t.registrationDeadline;
-  if (endDate && now > new Date(endDate).getTime()) return 'COMPLETED';
-  if (startDate && now >= new Date(startDate).getTime()) return 'ONGOING';
+  if (endDate     && now > new Date(endDate).getTime())     return 'COMPLETED';
+  if (startDate   && now >= new Date(startDate).getTime())  return 'ONGOING';
   if (regDeadline && now > new Date(regDeadline).getTime()) return 'REGISTRATION_CLOSED';
   return dbStatus;
 };
-
-// Custom Select component for attractive dropdowns
-const SelectField = ({ label, value, onChange, children, required }: {
-  label: string; value: string;
-  onChange: (v: string) => void;
-  children: React.ReactNode;
-  required?: boolean;
-}) => (
-  <div>
-    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-      {label}{required && ' *'}
-    </label>
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none bg-white border-2 border-gray-200 rounded-2xl px-4 py-3 text-sm font-semibold text-gray-800 focus:outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100 transition-all cursor-pointer pr-10 shadow-sm hover:border-gray-300">
-        {children}
-      </select>
-      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </div>
-    </div>
-  </div>
-);
 
 const SPORT_ROLES: Record<string, string[]> = {
   CRICKET:    ['BATSMAN', 'BOWLER', 'ALL_ROUNDER', 'WICKET_KEEPER'],
@@ -76,8 +48,171 @@ const SPORT_ROLES: Record<string, string[]> = {
 };
 
 const EXPERIENCE_OPTIONS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'PROFESSIONAL'];
-
 const toLocaleDateStr = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const S = `
+@keyframes spin   { to { transform:rotate(360deg); } }
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+.tn-root { min-height:100vh; }
+.tn-main { max-width:1280px; margin:0 auto; padding:32px 24px; display:flex; flex-direction:column; gap:20px; }
+
+.tn-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.tn-title  { font-family:'Barlow Condensed',sans-serif; font-size:36px; font-weight:900; color:#f8fafc; text-transform:uppercase; letter-spacing:0.02em; line-height:1; margin-bottom:6px; }
+.tn-sub    { font-size:14px; color:rgba(248,250,252,0.45); font-weight:300; }
+
+.tn-create-btn {
+  padding:10px 20px; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;
+  background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; border:none; cursor:pointer;
+  box-shadow:0 0 20px rgba(0,180,216,0.4); transition:transform 120ms,box-shadow 120ms,filter 120ms; position:relative; overflow:hidden;
+}
+.tn-create-btn:hover { transform:translateY(-1px); box-shadow:0 0 32px rgba(0,180,216,0.55); filter:brightness(1.08); }
+
+.tn-error { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); color:#fca5a5; font-size:13px; }
+
+.tn-tabs { display:flex; gap:4px; background:rgba(0,180,216,0.06); border:1px solid rgba(0,180,216,0.12); padding:4px; border-radius:10px; width:fit-content; }
+.tn-tab  { padding:8px 18px; border-radius:7px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; border:none; cursor:pointer; transition:all 150ms; display:flex; align-items:center; gap:6px; }
+.tn-tab.active { background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; }
+.tn-tab.idle   { background:transparent; color:rgba(248,250,252,0.45); }
+.tn-tab-count  { padding:1px 7px; border-radius:9999px; font-size:10px; font-weight:900; }
+.tn-tab.active .tn-tab-count { background:rgba(2,8,23,0.2); color:#020817; }
+.tn-tab.idle   .tn-tab-count { background:rgba(0,180,216,0.12); color:#00b4d8; }
+
+.tn-filters { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:20px; backdrop-filter:blur(12px); }
+.tn-filters-grid { display:grid; grid-template-columns:1fr; gap:14px; }
+@media(min-width:768px){ .tn-filters-grid { grid-template-columns:2fr 1fr 1fr; } }
+.tn-filter-label { display:block; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.45); margin-bottom:7px; }
+.tn-input, .tn-select {
+  width:100%; padding:10px 14px; border-radius:8px; font-family:'Barlow',sans-serif; font-size:13px; color:#f8fafc;
+  background:rgba(10,22,40,0.8); border:1px solid rgba(0,180,216,0.15); outline:none;
+  transition:border-color 120ms,background 120ms,box-shadow 120ms; -webkit-appearance:none; box-sizing:border-box;
+}
+.tn-input::placeholder { color:rgba(248,250,252,0.22); }
+.tn-input:focus,.tn-select:focus { border-color:rgba(0,180,216,0.55); background:rgba(0,180,216,0.06); box-shadow:0 0 0 3px rgba(0,180,216,0.12); }
+.tn-select option { background:#020817; color:#f8fafc; }
+
+.tn-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+
+.tn-card { border-radius:14px; overflow:hidden; background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); backdrop-filter:blur(12px); display:flex; flex-direction:column; transition:transform 220ms,border-color 220ms,box-shadow 220ms; }
+.tn-card:hover { transform:translateY(-4px); border-color:rgba(0,180,216,0.3); box-shadow:0 0 28px rgba(0,180,216,0.1); }
+
+.tn-card-header { padding:20px; background:linear-gradient(135deg,rgba(3,4,94,0.9),rgba(0,119,182,0.6)); border-bottom:1px solid rgba(0,180,216,0.15); position:relative; overflow:hidden; }
+.tn-card-header-orb { position:absolute; width:70px; height:70px; border-radius:50%; background:rgba(0,180,216,0.1); top:-15px; right:-15px; }
+.tn-card-header-inner { position:relative; z-index:10; display:flex; align-items:flex-start; justify-content:space-between; }
+.tn-card-icon { width:48px; height:48px; border-radius:10px; background:rgba(0,180,216,0.15); border:1px solid rgba(0,180,216,0.3); display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+.tn-card-name { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:900; text-transform:uppercase; letter-spacing:0.03em; color:#f8fafc; line-height:1.1; }
+.tn-card-venue { font-size:11px; color:rgba(248,250,252,0.45); margin-top:3px; }
+.tn-host-chip { padding:3px 8px; border-radius:4px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:rgba(0,180,216,0.2); border:1px solid rgba(0,180,216,0.3); color:#00b4d8; flex-shrink:0; }
+
+.tn-card-body { padding:16px; flex:1; display:flex; flex-direction:column; gap:12px; }
+.tn-badges { display:flex; flex-wrap:wrap; gap:6px; }
+.tn-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:4px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; }
+.tn-badge-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+
+.tn-details { display:flex; flex-direction:column; gap:5px; }
+.tn-detail  { display:flex; align-items:center; gap:8px; font-size:12px; color:rgba(248,250,252,0.45); }
+.tn-detail strong { color:rgba(248,250,252,0.7); }
+.tn-progress-track { flex:1; height:4px; border-radius:9999px; background:rgba(0,180,216,0.1); overflow:hidden; }
+.tn-progress-bar   { height:100%; border-radius:9999px; background:linear-gradient(90deg,#0077b6,#00b4d8); box-shadow:0 0 6px rgba(0,180,216,0.4); }
+
+.tn-card-actions { margin-top:auto; display:flex; flex-direction:column; gap:6px; }
+.tn-action-primary {
+  width:100%; padding:10px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;
+  background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  box-shadow:0 0 14px rgba(0,180,216,0.3); transition:transform 120ms,box-shadow 120ms,filter 120ms;
+}
+.tn-action-primary:hover { transform:translateY(-1px); box-shadow:0 0 22px rgba(0,180,216,0.5); filter:brightness(1.08); }
+.tn-action-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.tn-action-ghost {
+  width:100%; padding:10px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+  background:rgba(0,180,216,0.08); border:1px solid rgba(0,180,216,0.2); color:#00b4d8; cursor:pointer;
+  transition:background 120ms,border-color 120ms;
+}
+.tn-action-ghost:hover { background:rgba(0,180,216,0.14); border-color:rgba(0,180,216,0.35); }
+.tn-action-registered { width:100%; padding:10px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:rgba(0,180,216,0.08); border:1px solid rgba(0,180,216,0.2); color:#00b4d8; text-align:center; }
+.tn-action-restrict  { width:100%; padding:10px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:rgba(0,180,216,0.04); border:1px dashed rgba(0,180,216,0.15); color:rgba(0,180,216,0.5); text-align:center; }
+.tn-action-muted     { width:100%; padding:10px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:rgba(248,250,252,0.04); border:1px dashed rgba(248,250,252,0.1); color:rgba(248,250,252,0.3); text-align:center; }
+
+.tn-empty { background:rgba(10,22,40,0.7); border:1px solid rgba(0,180,216,0.15); border-radius:14px; padding:48px 32px; text-align:center; backdrop-filter:blur(12px); }
+.tn-empty-icon  { font-size:40px; opacity:0.3; margin-bottom:14px; }
+.tn-empty-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; text-transform:uppercase; letter-spacing:0.04em; color:rgba(248,250,252,0.6); margin-bottom:6px; }
+.tn-empty-sub   { font-size:13px; color:rgba(248,250,252,0.3); }
+
+.tn-modal-overlay { position:fixed; inset:0; background:rgba(2,8,23,0.88); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; backdrop-filter:blur(10px); }
+.tn-modal { background:rgba(10,22,40,0.97); border:1px solid rgba(0,180,216,0.25); border-radius:18px; box-shadow:0 8px 40px rgba(3,4,94,0.7),0 0 40px rgba(0,180,216,0.08); backdrop-filter:blur(20px); width:100%; animation:fadeUp 200ms ease both; }
+.tn-modal-sm { max-width:480px; overflow:hidden; }
+.tn-modal-md { max-width:540px; overflow:hidden; }
+.tn-modal-lg { max-width:560px; max-height:90vh; overflow-y:auto; }
+
+.tn-modal-hdr { padding:20px 24px; background:linear-gradient(135deg,rgba(3,4,94,0.8),rgba(0,119,182,0.5)); border-bottom:1px solid rgba(0,180,216,0.15); }
+.tn-modal-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; text-transform:uppercase; letter-spacing:0.03em; color:#f8fafc; }
+.tn-modal-sub   { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(0,180,216,0.7); margin-bottom:4px; }
+.tn-modal-venue { font-size:12px; color:rgba(248,250,252,0.4); margin-top:3px; }
+.tn-modal-close { width:30px; height:30px; border-radius:6px; background:rgba(0,180,216,0.1); border:1px solid rgba(0,180,216,0.2); color:rgba(248,250,252,0.6); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 120ms,color 120ms; }
+.tn-modal-close:hover { background:rgba(0,180,216,0.18); color:#f8fafc; }
+.tn-modal-body { padding:24px; display:flex; flex-direction:column; gap:14px; }
+
+.tn-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.tn-detail-cell { padding:10px 14px; border-radius:8px; background:rgba(0,180,216,0.04); border:1px solid rgba(0,180,216,0.1); }
+.tn-detail-cell-label { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.35); margin-bottom:4px; display:flex; align-items:center; gap:5px; }
+.tn-detail-cell-value { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:0.02em; color:#f8fafc; }
+
+.tn-cap-bar { background:rgba(0,180,216,0.1); border-radius:9999px; height:6px; overflow:hidden; }
+.tn-cap-fill { height:100%; border-radius:9999px; background:linear-gradient(90deg,#0077b6,#00b4d8); box-shadow:0 0 8px rgba(0,180,216,0.4); transition:width 0.5s; }
+
+.tn-field-label { display:block; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.45); margin-bottom:7px; }
+.tn-field-input, .tn-field-select, .tn-field-textarea {
+  width:100%; padding:10px 14px; border-radius:8px; font-family:'Barlow',sans-serif; font-size:13px; color:#f8fafc;
+  background:rgba(10,22,40,0.8); border:1px solid rgba(0,180,216,0.15); outline:none;
+  transition:border-color 120ms,background 120ms,box-shadow 120ms; -webkit-appearance:none; box-sizing:border-box;
+}
+.tn-field-input::placeholder,.tn-field-textarea::placeholder { color:rgba(248,250,252,0.22); }
+.tn-field-input:focus,.tn-field-select:focus,.tn-field-textarea:focus { border-color:rgba(0,180,216,0.55); background:rgba(0,180,216,0.06); box-shadow:0 0 0 3px rgba(0,180,216,0.12); }
+.tn-field-select option { background:#020817; color:#f8fafc; }
+.tn-field-textarea { resize:none; }
+.tn-field-hint { font-size:11px; color:rgba(251,191,36,0.8); margin-top:5px; }
+
+.tn-form-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.tn-btn-row   { display:flex; gap:10px; }
+
+.tn-btn-primary {
+  flex:1; padding:11px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;
+  background:linear-gradient(135deg,#0077b6,#00b4d8); color:#020817; border:none; cursor:pointer;
+  box-shadow:0 0 16px rgba(0,180,216,0.35); transition:transform 120ms,box-shadow 120ms,filter 120ms;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+.tn-btn-primary:hover { transform:translateY(-1px); box-shadow:0 0 24px rgba(0,180,216,0.5); filter:brightness(1.08); }
+.tn-btn-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.tn-btn-ghost {
+  flex:1; padding:11px 0; border-radius:8px; font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+  background:transparent; color:rgba(248,250,252,0.4); border:1px solid rgba(0,180,216,0.15); cursor:pointer;
+  transition:background 120ms,border-color 120ms,color 120ms;
+}
+.tn-btn-ghost:hover { background:rgba(0,180,216,0.06); border-color:rgba(0,180,216,0.3); color:#f8fafc; }
+
+.tn-team-radio {
+  display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:8px; cursor:pointer;
+  border:1px solid rgba(0,180,216,0.12); background:rgba(0,180,216,0.04); transition:border-color 150ms,background 150ms;
+}
+.tn-team-radio.checked { border-color:rgba(0,180,216,0.35); background:rgba(0,180,216,0.1); }
+.tn-team-name { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:0.03em; color:#f8fafc; }
+.tn-team-meta { font-size:11px; color:rgba(248,250,252,0.35); margin-top:2px; }
+
+.tn-fee-card { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; background:rgba(0,180,216,0.06); border:1px solid rgba(0,180,216,0.2); }
+.tn-fee-label { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(248,250,252,0.45); }
+.tn-fee-value { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900; color:#00b4d8; }
+
+.tn-step-indicators { display:flex; align-items:center; gap:6px; margin-top:14px; }
+.tn-step-dot   { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:900; transition:all 150ms; }
+.tn-step-label { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:rgba(248,250,252,0.4); }
+.tn-step-line  { flex:1; height:1px; background:rgba(0,180,216,0.2); border-radius:9999px; }
+
+.tn-success-icon { width:64px; height:64px; border-radius:50%; background:rgba(0,180,216,0.12); border:1px solid rgba(0,180,216,0.25); display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:28px; }
+.tn-league-info { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:8px; background:rgba(0,180,216,0.05); border:1px solid rgba(0,180,216,0.15); }
+
+.tn-spinner { animation:spin 0.8s linear infinite; }
+`;
 
 function Tournaments() {
   const navigate = useNavigate();
@@ -96,29 +231,32 @@ function Tournaments() {
   const [selectedTournament, setSelectedTournament] = useState<any | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
-  // Registration modal
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registeringTournament, setRegisteringTournament] = useState<any | null>(null);
   const [registerStep, setRegisterStep] = useState<'details' | 'payment' | 'done'>('details');
   const [registerForm, setRegisterForm] = useState({ role: '', experience: 'BEGINNER', preferredPosition: '', additionalInfo: '' });
   const [paymentLoading, setPaymentLoading] = useState(false);
   const rf = (field: string, value: string) => setRegisterForm((p) => ({ ...p, [field]: value }));
-  // Team role registration
   const [myRegTeams, setMyRegTeams] = useState<any[]>([]);
   const [selectedRegTeamId, setSelectedRegTeamId] = useState<string>('');
   const [createForm, setCreateForm] = useState({
     name: '', sport: 'CRICKET', format: 'KNOCKOUT', competitionType: 'TOURNAMENT',
-    venue: '', startDate: '', endDate: '', registrationDeadline: '',
-    registrationFee: 0, teamCapacity: 16,
+    venue: '', startDate: '', endDate: '', registrationDeadline: '', registrationFee: 0, teamCapacity: 16,
   });
   const cf = (field: string, value: any) => setCreateForm((p) => ({ ...p, [field]: value }));
   const [auctionMap, setAuctionMap] = useState<Record<string, { id: string; auctionStatus: string }>>({});
-  // Auction setup modal
   const [showAuctionSetup, setShowAuctionSetup] = useState(false);
   const [auctionSetupTournament, setAuctionSetupTournament] = useState<any | null>(null);
   const [auctionSetupForm, setAuctionSetupForm] = useState({ teamBudget: 1000, bidIncrement: 50, bidTimeout: 30, minSquadSize: 11, maxSquadSize: 15 });
   const [creatingAuction, setCreatingAuction] = useState(false);
   const af = (field: string, value: any) => setAuctionSetupForm((p) => ({ ...p, [field]: value }));
+
+  const Spinner = ({ dark }: { dark?: boolean }) => (
+    <svg className="tn-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke={dark ? 'rgba(2,8,23,0.3)' : 'rgba(0,180,216,0.2)'} strokeWidth="4"/>
+      <path fill={dark ? '#020817' : '#00b4d8'} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  );
 
   const handleStartAuction = async () => {
     if (!auctionSetupTournament) return;
@@ -130,23 +268,17 @@ function Tournaments() {
       setShowAuctionSetup(false);
       navigate(`/league-auctions/${auction.id}`);
     } catch (e: any) {
-      const msg = e.response?.data?.error || e.response?.data?.message || 'Failed to create auction';
-      alert(msg);
+      alert(e.response?.data?.error || e.response?.data?.message || 'Failed to create auction');
     } finally { setCreatingAuction(false); }
   };
 
   const handleRegisterOpen = async (t: any) => {
-    setRegisteringTournament(t);
-    setRegisterStep('details');
+    setRegisteringTournament(t); setRegisterStep('details');
     setRegisterForm({ role: '', experience: 'BEGINNER', preferredPosition: '', additionalInfo: '' });
     setSelectedRegTeamId('');
     if (user?.role === 'TEAM') {
-      try {
-        const r = await apiClient.get('/teams');
-        const teams = r.data?.data || r.data || [];
-        setMyRegTeams(teams);
-        if (teams.length > 0) setSelectedRegTeamId(teams[0].id);
-      } catch { setMyRegTeams([]); }
+      try { const r = await apiClient.get('/teams'); const teams = r.data?.data || r.data || []; setMyRegTeams(teams); if (teams.length > 0) setSelectedRegTeamId(teams[0].id); }
+      catch { setMyRegTeams([]); }
     }
     setShowRegisterModal(true);
   };
@@ -156,161 +288,93 @@ function Tournaments() {
     try {
       setRegisteringId(t.id);
       if (user?.role === 'TEAM') {
-        if (!selectedRegTeamId) { alert('Please select a team to register.'); return; }
+        if (!selectedRegTeamId) { alert('Please select a team.'); return; }
         await apiClient.post(`/tournaments/${t.id}/register`, { teamId: selectedRegTeamId });
       } else {
         if (!registerForm.role) { alert('Please select your playing role.'); return; }
         await apiClient.post(`/tournaments/${t.id}/register`, { playerDetails: registerForm });
       }
-      if (Number(t.registrationFee) > 0) {
-        setRegisterStep('payment');
-      } else {
-        setRegisterStep('done');
-        fetchTournaments(user);
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.error?.message || 'Registration failed. Please try again.');
-    } finally { setRegisteringId(null); }
+      if (Number(t.registrationFee) > 0) setRegisterStep('payment');
+      else { setRegisterStep('done'); fetchTournaments(user); }
+    } catch (err: any) { alert(err.response?.data?.error?.message || 'Registration failed.'); }
+    finally { setRegisteringId(null); }
   };
 
   const handlePayment = async () => {
     const t = registeringTournament;
     try {
       setPaymentLoading(true);
-      const res = await apiClient.post('/payments/initiate', {
-        tournamentId: t.id,
-        amount: t.registrationFee,
-      });
+      const res = await apiClient.post('/payments/initiate', { tournamentId: t.id, amount: t.registrationFee });
       const { orderId, amount, currency, keyId } = res.data.data;
-      // Load Razorpay checkout dynamically
       const loadRazorpay = () => new Promise<void>((resolve) => {
         if ((window as any).Razorpay) { resolve(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        s.onload = () => resolve();
-        document.body.appendChild(s);
+        const s = document.createElement('script'); s.src = 'https://checkout.razorpay.com/v1/checkout.js'; s.onload = () => resolve(); document.body.appendChild(s);
       });
       await loadRazorpay();
-      const options = {
-        key: keyId,
-        amount,
-        currency,
-        order_id: orderId,
-        name: 'Score Ocean',
+      const rzp = new (window as any).Razorpay({
+        key: keyId, amount, currency, order_id: orderId, name: 'Score Ocean',
         description: `Registration fee for ${t.name}`,
         handler: async (response: any) => {
-          try {
-            await apiClient.post('/payments/verify', {
-              orderId: response.razorpay_order_id,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-            });
-            setRegisterStep('done');
-            fetchTournaments(user);
-          } catch {
-            alert('Payment verification failed. Please contact support.');
-          }
+          try { await apiClient.post('/payments/verify', { orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature }); setRegisterStep('done'); fetchTournaments(user); }
+          catch { alert('Payment verification failed.'); }
         },
-        prefill: { email: user?.email || '' },
-        theme: { color: '#7c3aed' },
-      };
-      const rzp = new (window as any).Razorpay(options);
+        prefill: { email: user?.email || '' }, theme: { color: '#00b4d8' },
+      });
       rzp.open();
     } catch (err: any) {
-      if (err.response?.status === 503) {
-        // Razorpay not configured (dev mode) — mark as paid via simulate
-        alert('Payment gateway is not configured (dev mode). Your registration is PENDING until payment is verified.');
-        setShowRegisterModal(false);
-        fetchTournaments(user);
-      } else {
-        alert(err.response?.data?.error?.message || err.response?.data?.message || 'Payment initiation failed.');
-      }
+      if (err.response?.status === 503) { alert('Payment gateway not configured (dev mode).'); setShowRegisterModal(false); fetchTournaments(user); }
+      else alert(err.response?.data?.error?.message || 'Payment initiation failed.');
     } finally { setPaymentLoading(false); }
   };
 
   const handlePublish = async (id: string) => {
-    try {
-      await apiClient.post(`/tournaments/${id}/publish`);
-      fetchTournaments(user);
-    } catch (err: any) {
-      alert(err.response?.data?.error?.message || 'Failed to publish tournament');
-    }
+    try { await apiClient.post(`/tournaments/${id}/publish`); fetchTournaments(user); }
+    catch (err: any) { alert(err.response?.data?.error?.message || 'Failed to publish'); }
   };
 
   const handleCreateTournament = async () => {
-    if (!createForm.name || !createForm.venue || !createForm.startDate || !createForm.endDate || !createForm.registrationDeadline) {
-      alert('Please fill in all required fields.');
-      return;
-    }
-    if (new Date(createForm.registrationDeadline) >= new Date(createForm.startDate)) {
-      alert('Registration deadline must be strictly before the start date.');
-      return;
-    }
-    if (new Date(createForm.endDate) <= new Date(createForm.startDate)) {
-      alert('End date must be after the start date.');
-      return;
-    }
+    if (!createForm.name || !createForm.venue || !createForm.startDate || !createForm.endDate || !createForm.registrationDeadline) { alert('Please fill in all required fields.'); return; }
+    if (new Date(createForm.registrationDeadline) >= new Date(createForm.startDate)) { alert('Registration deadline must be before start date.'); return; }
+    if (new Date(createForm.endDate) <= new Date(createForm.startDate)) { alert('End date must be after start date.'); return; }
     try {
       setCreating(true);
       await apiClient.post('/tournaments', {
-        name: createForm.name,
-        sport: createForm.sport,
-        format: createForm.format,
-        competitionType: createForm.competitionType,
+        name: createForm.name, sport: createForm.sport, format: createForm.format, competitionType: createForm.competitionType,
         venue: createForm.venue,
         dates: { startDate: new Date(createForm.startDate), endDate: new Date(createForm.endDate) },
         registrationDeadline: new Date(createForm.registrationDeadline),
-        registrationFee: Number(createForm.registrationFee),
-        teamCapacity: Number(createForm.teamCapacity),
+        registrationFee: Number(createForm.registrationFee), teamCapacity: Number(createForm.teamCapacity),
         rules: { matchDuration: 90, pointsForWin: 3, pointsForDraw: 1, pointsForLoss: 0 },
       });
       setShowCreateModal(false);
-      setCreateForm({ name: '', sport: 'CRICKET', format: 'KNOCKOUT', competitionType: 'TOURNAMENT',
-        venue: '', startDate: '', endDate: '', registrationDeadline: '', registrationFee: 0, teamCapacity: 16 });
+      setCreateForm({ name: '', sport: 'CRICKET', format: 'KNOCKOUT', competitionType: 'TOURNAMENT', venue: '', startDate: '', endDate: '', registrationDeadline: '', registrationFee: 0, teamCapacity: 16 });
       fetchTournaments(user);
-    } catch (err: any) {
-      alert(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to create tournament');
-    } finally { setCreating(false); }
+    } catch (err: any) { alert(err.response?.data?.error?.message || 'Failed to create tournament'); }
+    finally { setCreating(false); }
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const accessToken = localStorage.getItem('accessToken');
+    const storedUser = localStorage.getItem('user'); const accessToken = localStorage.getItem('accessToken');
     if (!storedUser || !accessToken) { navigate('/login'); return; }
-    const parsedUser = JSON.parse(storedUser);
-    setUser(parsedUser);
-    fetchTournaments(parsedUser);
+    const parsedUser = JSON.parse(storedUser); setUser(parsedUser); fetchTournaments(parsedUser);
   }, [navigate]);
 
-  useEffect(() => {
-    if (user) fetchTournaments(user);
-  }, [searchQuery, sportFilter, statusFilter]);
+  useEffect(() => { if (user) fetchTournaments(user); }, [searchQuery, sportFilter, statusFilter]);
 
   useEffect(() => {
-    const leagueTournaments = allTournaments.filter(
-      (t: any) => t.format === 'LEAGUE' || t.competitionType === 'LEAGUE'
-    );
+    const leagueTournaments = allTournaments.filter((t: any) => t.format === 'LEAGUE' || t.competitionType === 'LEAGUE');
     leagueTournaments.forEach(async (t: any) => {
-      if (auctionMap[t.id]) return; // already fetched
-      try {
-        const r = await apiClient.get(`/league-auctions/tournament/${t.id}`);
-        const auction = r.data?.data || r.data;
-        if (auction?.id) {
-          setAuctionMap(prev => ({ ...prev, [t.id]: { id: auction.id, auctionStatus: auction.status || 'SETUP' } }));
-        }
-      } catch { /* no auction yet for this tournament */ }
+      if (auctionMap[t.id]) return;
+      try { const r = await apiClient.get(`/league-auctions/tournament/${t.id}`); const auction = r.data?.data || r.data; if (auction?.id) setAuctionMap(prev => ({ ...prev, [t.id]: { id: auction.id, auctionStatus: auction.status || 'SETUP' } })); }
+      catch {}
     });
   }, [allTournaments]);
 
-  // Auto-open tournament detail if ?manage=<id> is in the URL
   useEffect(() => {
     if (!manageId) return;
     const all = [...allTournaments, ...myTournaments];
     const found = all.find((t: any) => t.id === manageId);
-    if (found) {
-      setSelectedTournament(found);
-      setActiveTab('my');
-    }
+    if (found) { setSelectedTournament(found); setActiveTab('my'); }
   }, [manageId, allTournaments, myTournaments]);
 
   const fetchTournaments = async (currentUser: any) => {
@@ -320,190 +384,135 @@ function Tournaments() {
       if (searchQuery) params.q = searchQuery;
       if (sportFilter) params.sport = sportFilter;
       if (statusFilter) params.status = statusFilter;
-      // Include drafts so org can see and publish their own draft tournaments
       const r = await apiClient.get('/tournaments', { params: { ...params, includeDrafts: true } });
       const list = r.data?.data || r.data || [];
       setAllTournaments(list.filter((t: any) => t.status !== 'DRAFT'));
       setMyTournaments(list.filter((t: any) =>
         t.hostId === currentUser.id || t.host_id === currentUser.id ||
         t.registrations?.some((reg: any) => reg.playerId === currentUser.id || reg.team?.members?.some((m: any) => m.id === currentUser.id))));
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load tournaments');
-    } finally { setLoading(false); }
+    } catch (err: any) { setError(err.response?.data?.message || 'Failed to load tournaments'); }
+    finally { setLoading(false); }
   };
 
   const isRegistered = (t: any) => {
     if (!user) return false;
     const isLeague = t.format === 'LEAGUE' || t.competitionType === 'LEAGUE';
-    if (isLeague) {
-      // Check player registration
-      return t.registrations?.some((reg: any) => reg.playerId === user.id || reg.player?.id === user.id);
-    }
-    // Check team registration
+    if (isLeague) return t.registrations?.some((reg: any) => reg.playerId === user.id || reg.player?.id === user.id);
     return t.registrations?.some((reg: any) => reg.team?.members?.some((m: any) => m.id === user.id));
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div style={{ minHeight: '100vh' }}>
         <Navbar />
-        <div className="flex items-center justify-center min-h-[500px]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 rounded-full border-4 border-violet-200 border-t-violet-600 animate-spin" />
-            <p className="text-gray-500 text-sm">Loading tournaments...</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 500 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(0,180,216,0.2)', borderTopColor: '#00b4d8', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ color: 'rgba(248,250,252,0.45)', fontSize: 13, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Loading tournaments...</p>
           </div>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   const renderCard = (t: any) => {
-    const meta = SPORT_META[t.sport] || { icon: '🏆', gradient: 'from-violet-500 to-purple-600', bg: 'bg-violet-50', text: 'text-violet-700' };
+    const meta = SPORT_META[t.sport] || SPORT_META.FOOTBALL;
     const statusKey = getEffectiveStatusKey(t);
     const isLeague = t.format === 'LEAGUE' || t.competitionType === 'LEAGUE';
-    // For leagues: if dates say ONGOING but auction isn't COMPLETED, show AUCTION_PENDING
     const auctionEntry = auctionMap[t.id];
-    const displayStatusKey = (isLeague && statusKey === 'ONGOING' && auctionEntry?.auctionStatus !== 'COMPLETED')
-      ? 'AUCTION_PENDING'
-      : statusKey;
+    const displayStatusKey = (isLeague && statusKey === 'ONGOING' && auctionEntry?.auctionStatus !== 'COMPLETED') ? 'AUCTION_PENDING' : statusKey;
     const ss = STATUS_STYLE[displayStatusKey] || STATUS_STYLE.UPCOMING;
     const registered = isRegistered(t);
     const isHost = t.hostId === user?.id || t.host_id === user?.id;
     const userRole = user?.role;
-    // Players register for leagues only; teams register for tournaments only
-    const canUserRegisterThisType =
-      userRole === 'PLAYER' ? isLeague :
-      userRole === 'TEAM'   ? !isLeague :
-      false;
+    const canUserRegisterThisType = userRole === 'PLAYER' ? isLeague : userRole === 'TEAM' ? !isLeague : false;
     const isOpen = (statusKey === 'REGISTRATION_OPEN' || statusKey === 'UPCOMING' || statusKey === 'ACTIVE') && !['ONGOING', 'REGISTRATION_CLOSED', 'COMPLETED', 'CANCELLED'].includes(statusKey);
     const canRegister = isOpen && !registered && !isHost && canUserRegisterThisType;
-    const showTypeRestriction = isOpen && !registered && !isHost && !canUserRegisterThisType
-      && userRole !== 'ORGANIZATION' && userRole !== 'ADMIN';
+    const showTypeRestriction = isOpen && !registered && !isHost && !canUserRegisterThisType && userRole !== 'ORGANIZATION' && userRole !== 'ADMIN';
     const dates = t.dates || {};
     const startDate = dates.startDate || t.startDate;
-    const endDate = dates.endDate || t.endDate;
+    const endDate   = dates.endDate   || t.endDate;
     const capacity = t.teamCapacity || t.maxTeams || '—';
     const registrations = t.registrations?.length || t.currentTeams || 0;
     const fee = t.registrationFee != null ? `₹${t.registrationFee.toLocaleString('en-IN')}` : 'Free';
 
     return (
-      <div key={t.id} className="card-hover flex flex-col">
-        {/* Card Header */}
-        <div className={`p-5 rounded-t-2xl bg-gradient-to-br ${meta.gradient} text-white relative overflow-hidden`}>
-          <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-white/10" />
-          <div className="relative z-10 flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl">
-                {meta.icon}
-              </div>
-              <div>
-                <h3 className="font-black text-white leading-tight">{t.name}</h3>
-                <p className="text-white/70 text-xs">{t.venue || 'Venue TBD'}</p>
+      <div key={t.id} className="tn-card">
+        <div className="tn-card-header">
+          <div className="tn-card-header-orb" />
+          <div className="tn-card-header-inner">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div className="tn-card-icon" style={{ borderColor: meta.border, background: meta.bg }}>{meta.icon}</div>
+              <div style={{ minWidth: 0 }}>
+                <div className="tn-card-name">{t.name}</div>
+                <div className="tn-card-venue">{t.venue || 'Venue TBD'}</div>
               </div>
             </div>
-            {isHost && (
-              <span className="flex-shrink-0 px-2 py-1 rounded-lg bg-white/20 text-white text-xs font-bold">Host</span>
-            )}
+            {isHost && <span className="tn-host-chip">Host</span>}
           </div>
         </div>
 
-        {/* Card Body */}
-        <div className="p-5 flex-1 flex flex-col gap-4">
-          {/* Badges */}
-          <div className="flex flex-wrap gap-2">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl ${ss.bg} ${ss.text} text-xs font-bold`}>
-              {displayStatusKey !== 'AUCTION_PENDING' && <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />}{ss.label}
+        <div className="tn-card-body">
+          <div className="tn-badges">
+            <span className="tn-badge" style={{ background: ss.bg, color: ss.color, border: `1px solid ${ss.bg}` }}>
+              {displayStatusKey !== 'AUCTION_PENDING' && <span className="tn-badge-dot" style={{ background: ss.dot }} />}
+              {ss.label}
             </span>
-            <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-              isLeague ? 'bg-violet-100 text-violet-700' : 'bg-indigo-100 text-indigo-700'
-            }`}>
+            <span className="tn-badge" style={{ background: 'rgba(0,180,216,0.08)', color: '#00b4d8', border: '1px solid rgba(0,180,216,0.15)' }}>
               {isLeague ? '👤 League' : '👥 Tournament'}
             </span>
             {t.format && t.format !== 'LEAGUE' && (
-              <span className="px-2.5 py-1 rounded-xl bg-gray-100 text-gray-600 text-xs font-semibold">{t.format}</span>
+              <span className="tn-badge" style={{ background: 'rgba(248,250,252,0.05)', color: 'rgba(248,250,252,0.4)', border: '1px solid rgba(248,250,252,0.08)' }}>{t.format}</span>
             )}
           </div>
 
-          {/* Details */}
-          <div className="space-y-2">
+          <div className="tn-details">
             {startDate && (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="tn-detail">
                 <span>📅</span>
                 <span>{toLocaleDateStr(startDate)}{endDate ? ` – ${toLocaleDateStr(endDate)}` : ''}</span>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="tn-detail">
               <span>👥</span>
               <span>{registrations} / {capacity} teams</span>
-              <div className="flex-1 ml-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                <div className={`h-full rounded-full bg-gradient-to-r ${meta.gradient}`}
-                  style={{ width: typeof capacity === 'number' ? `${Math.min(100, (registrations / capacity) * 100)}%` : '0%' }} />
+              <div className="tn-progress-track">
+                <div className="tn-progress-bar" style={{ width: typeof capacity === 'number' ? `${Math.min(100, (registrations / capacity) * 100)}%` : '0%' }} />
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="tn-detail">
               <span>💰</span>
-              <span className="font-semibold text-gray-700">{fee} registration fee</span>
+              <strong>{fee} registration fee</strong>
             </div>
           </div>
 
-          {/* Action */}
-          <div className="mt-auto flex flex-col gap-2">
+          <div className="tn-card-actions">
             {registered ? (
-              <div className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-center text-sm font-bold border-2 border-emerald-200">
-                ✓ Registered
-              </div>
+              <div className="tn-action-registered">✓ Registered</div>
             ) : canRegister ? (
-              <button
-                onClick={() => handleRegisterOpen(t)}
-                disabled={registeringId === t.id}
-                className={`w-full py-2.5 bg-gradient-to-r ${meta.gradient} text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2`}>
-                {registeringId === t.id ? (
-                  <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Registering...</>
-                ) : isLeague ? 'Register as Player →' : 'Register Team →'}
+              <button className="tn-action-primary" onClick={() => handleRegisterOpen(t)} disabled={registeringId === t.id}>
+                {registeringId === t.id ? <><Spinner dark />Registering...</> : isLeague ? 'Register as Player →' : 'Register Team →'}
               </button>
             ) : showTypeRestriction ? (
-              <div className={`w-full py-2.5 rounded-xl text-center text-xs font-bold border-2 border-dashed ${
-                isLeague
-                  ? 'bg-violet-50 text-violet-500 border-violet-200'
-                  : 'bg-indigo-50 text-indigo-500 border-indigo-200'
-              }`}>
-                {isLeague ? '👤 Players only' : '👥 Teams only'}
-              </div>
+              <div className="tn-action-restrict">{isLeague ? '👤 Players only' : '👥 Teams only'}</div>
             ) : isHost && displayStatusKey === 'DRAFT' ? (
-              <button
-                onClick={() => handlePublish(t.id)}
-                className={`w-full py-2.5 bg-gradient-to-r from-primary-600 to-primary-400 text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2`}>
-                🚀 Publish Tournament
-              </button>
+              <button className="tn-action-primary" onClick={() => handlePublish(t.id)}>🚀 Publish Tournament</button>
             ) : (
-              <button
-                onClick={() => setSelectedTournament(t)}
-                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">
-                View Details
-              </button>
+              <button className="tn-action-ghost" onClick={() => setSelectedTournament(t)}>View Details</button>
             )}
             {isLeague && auctionEntry?.id && (isHost || registered || user?.role === 'TEAM') && (
-              <button
-                onClick={() => navigate(`/league-auctions/${auctionEntry.id}`)}
-                className="w-full py-2.5 bg-gradient-to-r from-primary-600 to-primary-400 text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2">
+              <button className="tn-action-primary" onClick={() => navigate(`/league-auctions/${auctionEntry.id}`)}>
                 🔨 {isHost ? 'Manage Auction' : 'View Auction'}
               </button>
             )}
             {isLeague && isHost && !auctionEntry && statusKey !== 'DRAFT' && (
               statusKey === 'REGISTRATION_CLOSED' ? (
-                <button
-                  onClick={() => { setAuctionSetupTournament(t); setShowAuctionSetup(true); }}
-                  className="w-full py-2.5 bg-gradient-to-r from-primary-600 to-primary-400 text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2">
-                  🔨 Start Auction
-                </button>
+                <button className="tn-action-primary" onClick={() => { setAuctionSetupTournament(t); setShowAuctionSetup(true); }}>🔨 Start Auction</button>
               ) : (statusKey === 'ONGOING' || statusKey === 'COMPLETED') ? (
-                <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold border-2 border-dashed bg-gray-50 text-gray-400 border-gray-200">
-                  🔒 Tournament started — auction window passed
-                </div>
+                <div className="tn-action-muted">🔒 Auction window passed</div>
               ) : (
-                <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold border-2 border-dashed bg-primary-50 text-primary-500 border-primary-200">
-                  ⏳ Auction available after registration closes
-                </div>
+                <div className="tn-action-restrict">⏳ Available after registration closes</div>
               )
             )}
           </div>
@@ -515,529 +524,391 @@ function Tournaments() {
   const displayed = activeTab === 'all' ? allTournaments : myTournaments;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <>
+      <style>{S}</style>
+      <div className="tn-root">
+        <Navbar />
+        <main className="tn-main">
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-black text-gray-900" style={{ fontFamily: 'Syne, sans-serif' }}>Tournaments</h1>
-            <p className="text-gray-500 mt-1">Browse, register and compete in tournaments</p>
+          {/* Header */}
+          <div className="tn-header">
+            <div>
+              <h1 className="tn-title">Tournaments</h1>
+              <p className="tn-sub">Browse, register and compete in tournaments</p>
+            </div>
+            {(user?.role === 'ORGANIZATION' || user?.role === 'ADMIN') && (
+              <button className="tn-create-btn" onClick={() => setShowCreateModal(true)}>+ Create Tournament</button>
+            )}
           </div>
-          {(user?.role === 'ORGANIZATION' || user?.role === 'ADMIN') && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-400 text-white rounded-xl text-sm font-bold hover:from-primary-700 transition-all shadow-sm">
-              + Create Tournament
-            </button>
+
+          {error && (
+            <div className="tn-error">
+              <span>⚠️</span><p style={{ flex: 1 }}>{error}</p>
+            </div>
           )}
-        </div>
 
-        {error && (
-          <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-            <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <p className="text-rose-700 font-medium text-sm">{error}</p>
+          {/* Tabs */}
+          <div className="tn-tabs">
+            {[
+              { id: 'all', label: 'All Tournaments', count: allTournaments.length },
+              { id: 'my',  label: 'My Tournaments',  count: myTournaments.length  },
+            ].map((tab) => (
+              <button key={tab.id} className={`tn-tab ${activeTab === tab.id ? 'active' : 'idle'}`} onClick={() => setActiveTab(tab.id as any)}>
+                {tab.label}
+                <span className="tn-tab-count">{tab.count}</span>
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-gray-200/60 p-1 rounded-2xl w-fit">
-          {[
-            { id: 'all', label: 'All Tournaments', count: allTournaments.length },
-            { id: 'my',  label: 'My Tournaments',  count: myTournaments.length  },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              {tab.label}
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${activeTab === tab.id ? 'bg-violet-100 text-violet-700' : 'bg-gray-300 text-gray-600'}`}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div className="card p-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-1">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Search</label>
-              <input type="text" placeholder="Search tournaments..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Sport</label>
-              <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)} className="input-field">
-                <option value="">All Sports</option>
-                {Object.keys(SPORT_META).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status</label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input-field">
-                <option value="">All Status</option>
-                <option value="REGISTRATION_OPEN">Registration Open</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="UPCOMING">Upcoming</option>
-                <option value="COMPLETED">Completed</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Grid */}
-        {displayed.length === 0 ? (
-          <div className="card p-12 text-center">
-            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-4xl mx-auto mb-4">🏆</div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              {activeTab === 'my' ? 'Not in any tournaments' : 'No tournaments found'}
-            </h3>
-            <p className="text-gray-500">
-              {activeTab === 'my' ? 'Register for a tournament to see it here' : 'Check back later or adjust your filters'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {displayed.map((t) => renderCard(t))}
-          </div>
-        )}
-      </main>
-
-      {/* ── Tournament Detail Modal ─────────────────────────────────── */}
-      {selectedTournament && (() => {
-        const t = selectedTournament;
-        const meta = SPORT_META[t.sport] || { icon: '🏆', gradient: 'from-violet-500 to-purple-600', bg: 'bg-violet-50', text: 'text-violet-700' };
-        const statusKey = getEffectiveStatusKey(t);
-        const isLeague = t.format === 'LEAGUE' || t.competitionType === 'LEAGUE';
-        const auctionEntry = auctionMap[t.id];
-        const displayStatusKey = (isLeague && statusKey === 'ONGOING' && auctionEntry?.auctionStatus !== 'COMPLETED')
-          ? 'AUCTION_PENDING' : statusKey;
-        const ss = STATUS_STYLE[displayStatusKey] || STATUS_STYLE.UPCOMING;
-        const dates = t.dates || {};
-        const startDate = dates.startDate || t.startDate;
-        const endDate   = dates.endDate   || t.endDate;
-        const regs = t.registrations?.length || t.currentTeams || 0;
-        const cap  = t.teamCapacity || t.maxTeams || '—';
-        const fee  = t.registrationFee != null ? `₹${t.registrationFee.toLocaleString('en-IN')}` : 'Free';
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedTournament(null)} />
-            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in">
-              {/* Header */}
-              <div className={`p-6 bg-gradient-to-br ${meta.gradient} text-white`}>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl">{meta.icon}</div>
-                    <div>
-                      <h2 className="text-xl font-black leading-tight">{t.name}</h2>
-                      <p className="text-white/70 text-sm mt-0.5">{t.venue || 'Venue TBD'}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setSelectedTournament(null)} className="w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors flex-shrink-0">✕</button>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/20 text-white text-xs font-bold`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />{ss.label}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-xl bg-white/20 text-white text-xs font-bold">{isLeague ? '👤 League' : '👥 Tournament'}</span>
-                  {t.format && t.format !== 'LEAGUE' && <span className="px-2.5 py-1 rounded-xl bg-white/20 text-white text-xs font-bold">{t.format}</span>}
-                </div>
+          {/* Filters */}
+          <div className="tn-filters">
+            <div className="tn-filters-grid">
+              <div>
+                <label className="tn-filter-label">Search</label>
+                <input type="text" placeholder="Search tournaments..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="tn-input" />
               </div>
+              <div>
+                <label className="tn-filter-label">Sport</label>
+                <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)} className="tn-select">
+                  <option value="">All Sports</option>
+                  {Object.keys(SPORT_META).map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="tn-filter-label">Status</label>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="tn-select">
+                  <option value="">All Status</option>
+                  <option value="REGISTRATION_OPEN">Registration Open</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="UPCOMING">Upcoming</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </div>
+            </div>
+          </div>
 
-              {/* Body */}
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { icon: '📅', label: 'Start Date',  value: startDate ? toLocaleDateStr(startDate) : '—' },
-                    { icon: '📅', label: 'End Date',    value: endDate   ? toLocaleDateStr(endDate)   : '—' },
-                    { icon: '👥', label: 'Teams',       value: `${regs} / ${cap}` },
-                    { icon: '💰', label: 'Entry Fee',   value: fee },
-                    { icon: '🏅', label: 'Sport',       value: t.sport },
-                    { icon: '📋', label: 'Format',      value: t.format || '—' },
-                  ].map((row) => (
-                    <div key={row.label} className={`p-3 rounded-2xl ${meta.bg}`}>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-sm">{row.icon}</span>
-                        <p className="text-xs text-gray-400 font-medium">{row.label}</p>
+          {/* Grid */}
+          {displayed.length === 0 ? (
+            <div className="tn-empty">
+              <div className="tn-empty-icon">🏆</div>
+              <div className="tn-empty-title">{activeTab === 'my' ? 'Not in any tournaments' : 'No tournaments found'}</div>
+              <div className="tn-empty-sub">{activeTab === 'my' ? 'Register for a tournament to see it here' : 'Check back later or adjust your filters'}</div>
+            </div>
+          ) : (
+            <div className="tn-grid">{displayed.map((t) => renderCard(t))}</div>
+          )}
+        </main>
+
+        {/* Detail Modal */}
+        {selectedTournament && (() => {
+          const t = selectedTournament;
+          const meta = SPORT_META[t.sport] || SPORT_META.FOOTBALL;
+          const statusKey = getEffectiveStatusKey(t);
+          const isLeague = t.format === 'LEAGUE' || t.competitionType === 'LEAGUE';
+          const auctionEntry = auctionMap[t.id];
+          const displayStatusKey = (isLeague && statusKey === 'ONGOING' && auctionEntry?.auctionStatus !== 'COMPLETED') ? 'AUCTION_PENDING' : statusKey;
+          const ss = STATUS_STYLE[displayStatusKey] || STATUS_STYLE.UPCOMING;
+          const dates = t.dates || {};
+          const startDate = dates.startDate || t.startDate;
+          const endDate   = dates.endDate   || t.endDate;
+          const regs = t.registrations?.length || t.currentTeams || 0;
+          const cap  = t.teamCapacity || t.maxTeams || '—';
+          const fee  = t.registrationFee != null ? `₹${t.registrationFee.toLocaleString('en-IN')}` : 'Free';
+          return (
+            <div className="tn-modal-overlay" onClick={() => setSelectedTournament(null)}>
+              <div className="tn-modal tn-modal-md" onClick={(e) => e.stopPropagation()}>
+                <div className="tn-modal-hdr">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 10, background: meta.bg, border: `1px solid ${meta.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{meta.icon}</div>
+                      <div>
+                        <div className="tn-modal-title">{t.name}</div>
+                        <div className="tn-modal-venue">{t.venue || 'Venue TBD'}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                          <span className="tn-badge" style={{ background: ss.bg, color: ss.color, border: `1px solid ${ss.bg}` }}>
+                            <span className="tn-badge-dot" style={{ background: ss.dot }} />{ss.label}
+                          </span>
+                          <span className="tn-badge" style={{ background: 'rgba(0,180,216,0.1)', color: '#00b4d8', border: '1px solid rgba(0,180,216,0.2)' }}>
+                            {isLeague ? '👤 League' : '👥 Tournament'}
+                          </span>
+                          {t.format && t.format !== 'LEAGUE' && (
+                            <span className="tn-badge" style={{ background: 'rgba(248,250,252,0.05)', color: 'rgba(248,250,252,0.4)', border: '1px solid rgba(248,250,252,0.08)' }}>{t.format}</span>
+                          )}
+                        </div>
                       </div>
-                      <p className={`text-sm font-bold ${meta.text}`}>{row.value}</p>
                     </div>
-                  ))}
+                    <button className="tn-modal-close" onClick={() => setSelectedTournament(null)}>✕</button>
+                  </div>
                 </div>
 
-                {/* Capacity bar */}
-                {typeof cap === 'number' && (
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                      <span>Registration progress</span>
-                      <span>{Math.round((regs / cap) * 100)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full rounded-full bg-gradient-to-r ${meta.gradient} transition-all`}
-                        style={{ width: `${Math.min(100, (regs / cap) * 100)}%` }} />
-                    </div>
+                <div className="tn-modal-body">
+                  <div className="tn-detail-grid">
+                    {[
+                      { icon: '📅', label: 'Start Date', value: startDate ? toLocaleDateStr(startDate) : '—' },
+                      { icon: '📅', label: 'End Date',   value: endDate   ? toLocaleDateStr(endDate)   : '—' },
+                      { icon: '👥', label: 'Teams',      value: `${regs} / ${cap}` },
+                      { icon: '💰', label: 'Entry Fee',  value: fee },
+                      { icon: '🏅', label: 'Sport',      value: t.sport },
+                      { icon: '📋', label: 'Format',     value: t.format || '—' },
+                    ].map((row) => (
+                      <div key={row.label} className="tn-detail-cell">
+                        <div className="tn-detail-cell-label"><span>{row.icon}</span>{row.label}</div>
+                        <div className="tn-detail-cell-value" style={{ color: meta.accent }}>{row.value}</div>
+                      </div>
+                    ))}
                   </div>
-                )}
-
-                {t.description && (
-                  <p className="text-sm text-gray-600 leading-relaxed">{t.description}</p>
-                )}
+                  {typeof cap === 'number' && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(248,250,252,0.35)', marginBottom: 6, fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        <span>Registration progress</span><span>{Math.round((regs / cap) * 100)}%</span>
+                      </div>
+                      <div className="tn-cap-bar"><div className="tn-cap-fill" style={{ width: `${Math.min(100, (regs / cap) * 100)}%` }} /></div>
+                    </div>
+                  )}
+                  {t.description && <p style={{ fontSize: 13, color: 'rgba(248,250,252,0.45)', lineHeight: 1.6 }}>{t.description}</p>}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
-      {/* ── Register Modal ─────────────────────────────────────────── */}
-      {showRegisterModal && registeringTournament && (() => {
-        const t = registeringTournament;
-        const meta = SPORT_META[t.sport] || { gradient: 'from-violet-500 to-purple-600', bg: 'bg-violet-50', text: 'text-violet-700', icon: '🏆' };
-        const roles = SPORT_ROLES[t.sport] || ['PLAYER'];
-        const fee = Number(t.registrationFee);
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowRegisterModal(false)} />
-            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
-              {/* Header */}
-              <div className={`p-6 bg-gradient-to-br ${meta.gradient} text-white`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-0.5">
-                      {registerStep === 'details' ? (user?.role === 'TEAM' ? 'Team Registration' : 'Player Registration') : registerStep === 'payment' ? 'Payment' : 'Confirmed!'}
-                    </p>
-                    <h2 className="text-xl font-black leading-tight">{t.name}</h2>
-                    <p className="text-white/70 text-sm mt-0.5">{meta.icon} {t.sport} &nbsp;·&nbsp; {t.venue}</p>
+        {/* Register Modal */}
+        {showRegisterModal && registeringTournament && (() => {
+          const t = registeringTournament;
+          const meta = SPORT_META[t.sport] || SPORT_META.FOOTBALL;
+          const roles = SPORT_ROLES[t.sport] || ['PLAYER'];
+          const fee = Number(t.registrationFee);
+          const steps = ['details', fee > 0 ? 'payment' : null, 'done'].filter(Boolean) as string[];
+          return (
+            <div className="tn-modal-overlay" onClick={() => setShowRegisterModal(false)}>
+              <div className="tn-modal tn-modal-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="tn-modal-hdr">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div className="tn-modal-sub">{registerStep === 'details' ? (user?.role === 'TEAM' ? 'Team Registration' : 'Player Registration') : registerStep === 'payment' ? 'Payment' : 'Confirmed!'}</div>
+                      <div className="tn-modal-title">{t.name}</div>
+                      <div className="tn-modal-venue">{meta.icon} {t.sport}{t.venue ? ` · ${t.venue}` : ''}</div>
+                    </div>
+                    <button className="tn-modal-close" onClick={() => setShowRegisterModal(false)}>✕</button>
                   </div>
-                  <button onClick={() => setShowRegisterModal(false)} className="w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors flex-shrink-0">✕</button>
+                  <div className="tn-step-indicators">
+                    {steps.map((step, i) => (
+                      <React.Fragment key={step}>
+                        <div className="tn-step-dot" style={{
+                          background: step === registerStep ? '#00b4d8' : steps.indexOf(step) < steps.indexOf(registerStep) ? 'rgba(0,180,216,0.4)' : 'rgba(0,180,216,0.1)',
+                          color: step === registerStep ? '#020817' : steps.indexOf(step) < steps.indexOf(registerStep) ? '#f8fafc' : 'rgba(248,250,252,0.4)',
+                        }}>{i + 1}</div>
+                        <span className="tn-step-label">{step}</span>
+                        {i < steps.length - 1 && <div className="tn-step-line" />}
+                      </React.Fragment>
+                    ))}
+                  </div>
                 </div>
-                {/* Step indicator */}
-                <div className="flex items-center gap-2 mt-4">
-                  {['details', fee > 0 ? 'payment' : null, 'done'].filter(Boolean).map((step, i, arr) => (
-                    <React.Fragment key={step as string}>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        step === registerStep ? 'bg-white text-violet-700' :
-                        arr.indexOf(step) < arr.indexOf(registerStep) ? 'bg-white/40 text-white' : 'bg-white/20 text-white/60'
-                      }`}>{i + 1}</div>
-                      <span className="text-white/60 text-xs font-medium capitalize">{step}</span>
-                      {i < arr.length - 1 && <div className="flex-1 h-0.5 bg-white/20 rounded" />}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
 
-              <div className="p-6">
-                {/* Step 1: Player / Team Details */}
-                {registerStep === 'details' && (
-                  <div className="space-y-4">
-                    {user?.role === 'TEAM' ? (
-                      /* TEAM role: select which team to register */
-                      <>
-                        <p className="text-sm font-medium text-gray-700">Select the team you want to register for this tournament:</p>
-                        {myRegTeams.length === 0 ? (
-                          <p className="text-sm text-gray-400 py-4 text-center">No teams found. Create a team first.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {myRegTeams.map((team: any) => (
-                              <label key={team.id} className={`flex items-center gap-3 p-3.5 rounded-2xl cursor-pointer border-2 transition-all ${selectedRegTeamId === team.id ? `border-violet-400 bg-violet-50` : 'border-gray-100 hover:border-gray-200 bg-gray-50'}`}>
-                                <input type="radio" name="regTeam" value={team.id} checked={selectedRegTeamId === team.id} onChange={() => setSelectedRegTeamId(team.id)} className="accent-violet-600" />
+                <div className="tn-modal-body">
+                  {registerStep === 'details' && (
+                    <>
+                      {user?.role === 'TEAM' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <p style={{ fontSize: 13, color: 'rgba(248,250,252,0.5)' }}>Select the team to register:</p>
+                          {myRegTeams.length === 0
+                            ? <p style={{ fontSize: 13, color: 'rgba(248,250,252,0.3)', textAlign: 'center', padding: '16px 0' }}>No teams found. Create a team first.</p>
+                            : myRegTeams.map((team: any) => (
+                              <label key={team.id} className={`tn-team-radio${selectedRegTeamId === team.id ? ' checked' : ''}`}>
+                                <input type="radio" name="regTeam" value={team.id} checked={selectedRegTeamId === team.id} onChange={() => setSelectedRegTeamId(team.id)} style={{ accentColor: '#00b4d8' }} />
                                 <div>
-                                  <p className="font-bold text-sm text-gray-900">{team.name}</p>
-                                  <p className="text-xs text-gray-400">{team.sport}{team.location ? ` · ${team.location}` : ''}</p>
+                                  <div className="tn-team-name">{team.name}</div>
+                                  <div className="tn-team-meta">{team.sport}{team.location ? ` · ${team.location}` : ''}</div>
                                 </div>
                               </label>
-                            ))}
+                            ))
+                          }
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="tn-field-label">Playing Role *</label>
+                            <select value={registerForm.role} onChange={(e) => rf('role', e.target.value)} className="tn-field-select">
+                              <option value="">Select your role…</option>
+                              {roles.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                            </select>
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      /* PLAYER role: existing form */
-                      <>
-                        <SelectField label="Playing Role" value={registerForm.role} onChange={(v) => rf('role', v)} required>
-                          <option value="">Select your role…</option>
-                          {roles.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                        </SelectField>
-
-                        <SelectField label="Experience Level" value={registerForm.experience} onChange={(v) => rf('experience', v)} required>
-                          {EXPERIENCE_OPTIONS.map((e) => <option key={e} value={e}>{e.charAt(0) + e.slice(1).toLowerCase()}</option>)}
-                        </SelectField>
-
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Preferred Position</label>
-                          <input type="text" value={registerForm.preferredPosition}
-                            onChange={(e) => rf('preferredPosition', e.target.value)}
-                            placeholder="e.g. Opening Batsman, Leg Spinner"
-                            className="input-field" />
+                          <div>
+                            <label className="tn-field-label">Experience Level *</label>
+                            <select value={registerForm.experience} onChange={(e) => rf('experience', e.target.value)} className="tn-field-select">
+                              {EXPERIENCE_OPTIONS.map((e) => <option key={e} value={e}>{e.charAt(0) + e.slice(1).toLowerCase()}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="tn-field-label">Preferred Position</label>
+                            <input type="text" value={registerForm.preferredPosition} onChange={(e) => rf('preferredPosition', e.target.value)} placeholder="e.g. Opening Batsman" className="tn-field-input" />
+                          </div>
+                          <div>
+                            <label className="tn-field-label">Additional Info</label>
+                            <textarea value={registerForm.additionalInfo} onChange={(e) => rf('additionalInfo', e.target.value)} placeholder="Any additional information…" rows={2} className="tn-field-textarea" />
+                          </div>
+                        </>
+                      )}
+                      {fee > 0 && (
+                        <div className="tn-fee-card">
+                          <span style={{ fontSize: 22 }}>💳</span>
+                          <div><div className="tn-fee-label">Registration Fee</div><div className="tn-fee-value">₹{fee.toLocaleString('en-IN')}</div></div>
                         </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Additional Info</label>
-                          <textarea value={registerForm.additionalInfo}
-                            onChange={(e) => rf('additionalInfo', e.target.value)}
-                            placeholder="Any additional information about yourself…"
-                            rows={2}
-                            className="input-field resize-none" />
-                        </div>
-                      </>
-                    )}
-
-                    {fee > 0 && (
-                      <div className={`flex items-center gap-3 p-3 ${meta.bg} rounded-2xl border border-violet-100`}>
-                        <span className="text-xl">💳</span>
-                        <div>
-                          <p className="text-xs font-bold text-gray-700">Registration Fee</p>
-                          <p className={`text-lg font-black ${meta.text}`}>₹{fee.toLocaleString('en-IN')}</p>
-                        </div>
+                      )}
+                      <div className="tn-btn-row">
+                        <button className="tn-btn-ghost" onClick={() => setShowRegisterModal(false)}>Cancel</button>
+                        <button className="tn-btn-primary" onClick={handleRegisterSubmit} disabled={registeringId === t.id || (user?.role === 'TEAM' ? !selectedRegTeamId : !registerForm.role)}>
+                          {registeringId === t.id ? <><Spinner dark />Submitting…</> : fee > 0 ? 'Continue to Payment →' : 'Register for Free →'}
+                        </button>
                       </div>
-                    )}
+                    </>
+                  )}
 
-                    <div className="flex gap-3 pt-1">
-                      <button onClick={() => setShowRegisterModal(false)}
-                        className="flex-1 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors">
-                        Cancel
+                  {registerStep === 'payment' && (
+                    <>
+                      <div style={{ textAlign: 'center' }}>
+                        <div className="tn-success-icon">✓</div>
+                        <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 16, fontWeight: 800, textTransform: 'uppercase', color: '#f8fafc', marginTop: 12 }}>Details Submitted!</p>
+                        <p style={{ fontSize: 13, color: 'rgba(248,250,252,0.45)', marginTop: 4 }}>Complete payment to confirm your spot in <strong style={{ color: '#00b4d8' }}>{t.name}</strong>.</p>
+                      </div>
+                      <div className="tn-fee-card" style={{ justifyContent: 'center', flexDirection: 'column', textAlign: 'center' }}>
+                        <div className="tn-fee-label">Amount Due</div>
+                        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 36, fontWeight: 900, color: '#00b4d8' }}>₹{fee.toLocaleString('en-IN')}</div>
+                      </div>
+                      <button className="tn-btn-primary" style={{ flex: 'none', width: '100%', padding: '14px 0', fontSize: 14 }} onClick={handlePayment} disabled={paymentLoading}>
+                        {paymentLoading ? <><Spinner dark />Processing…</> : `💳 Pay ₹${fee.toLocaleString('en-IN')}`}
                       </button>
-                      <button
-                        onClick={handleRegisterSubmit}
-                        disabled={registeringId === t.id || (user?.role === 'TEAM' ? !selectedRegTeamId : !registerForm.role)}
-                        className={`flex-1 py-3 rounded-xl bg-gradient-to-r ${meta.gradient} text-white font-bold text-sm hover:opacity-90 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2`}>
-                        {registeringId === t.id
-                          ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Submitting…</>
-                          : fee > 0 ? 'Continue to Payment →' : 'Register for Free →'}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                      <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(248,250,252,0.25)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>Secured by Razorpay</p>
+                    </>
+                  )}
 
-                {/* Step 2: Payment */}
-                {registerStep === 'payment' && (
-                  <div className="space-y-5">
-                    <div className="text-center">
-                      <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center text-3xl mx-auto mb-3">✓</div>
-                      <p className="font-bold text-gray-900">Details submitted!</p>
-                      <p className="text-sm text-gray-500 mt-1">Complete payment to confirm your spot in <span className="font-semibold">{t.name}</span>.</p>
+                  {registerStep === 'done' && (
+                    <div style={{ textAlign: 'center', padding: '16px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                      <div style={{ fontSize: 44 }}>🎉</div>
+                      <div>
+                        <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 22, fontWeight: 900, textTransform: 'uppercase', color: '#f8fafc' }}>You're In!</div>
+                        <div style={{ fontSize: 13, color: 'rgba(248,250,252,0.45)', marginTop: 4 }}>Successfully registered for <strong style={{ color: '#00b4d8' }}>{t.name}</strong>.</div>
+                      </div>
+                      <button className="tn-btn-primary" style={{ flex: 'none', width: '100%', padding: '12px 0' }} onClick={() => setShowRegisterModal(false)}>Done</button>
                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
-                    <div className={`p-4 ${meta.bg} rounded-2xl text-center`}>
-                      <p className="text-xs text-gray-500 font-medium">Amount Due</p>
-                      <p className={`text-3xl font-black ${meta.text} mt-0.5`}>₹{fee.toLocaleString('en-IN')}</p>
-                    </div>
-
-                    <button onClick={handlePayment} disabled={paymentLoading}
-                      className={`w-full py-3.5 rounded-xl bg-gradient-to-r ${meta.gradient} text-white font-black text-base hover:opacity-90 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2`}>
-                      {paymentLoading
-                        ? <><div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Processing…</>
-                        : '💳 Pay ₹' + fee.toLocaleString('en-IN')}
-                    </button>
-                    <p className="text-center text-xs text-gray-400">Secured by Razorpay</p>
-                  </div>
-                )}
-
-                {/* Step 3: Done */}
-                {registerStep === 'done' && (
-                  <div className="text-center space-y-4 py-4">
-                    <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center text-4xl mx-auto">🎉</div>
-                    <div>
-                      <h3 className="text-xl font-black text-gray-900">You're in!</h3>
-                      <p className="text-gray-500 text-sm mt-1">Successfully registered for <span className="font-semibold">{t.name}</span>.</p>
-                    </div>
-                    <button onClick={() => setShowRegisterModal(false)}
-                      className={`w-full py-3 rounded-xl bg-gradient-to-r ${meta.gradient} text-white font-bold text-sm hover:opacity-90 transition-all shadow-sm`}>
-                      Done
-                    </button>
-                  </div>
-                )}
+        {/* Auction Setup Modal */}
+        {showAuctionSetup && auctionSetupTournament && (
+          <div className="tn-modal-overlay" onClick={() => setShowAuctionSetup(false)}>
+            <div className="tn-modal tn-modal-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="tn-modal-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div className="tn-modal-sub">Start Auction</div>
+                  <div className="tn-modal-title">🔨 Auction Setup</div>
+                  <div className="tn-modal-venue">{auctionSetupTournament.name}</div>
+                </div>
+                <button className="tn-modal-close" onClick={() => setShowAuctionSetup(false)}>✕</button>
+              </div>
+              <div className="tn-modal-body">
+                <div>
+                  <label className="tn-field-label">Starting Budget per Team</label>
+                  <input type="number" value={auctionSetupForm.teamBudget} onChange={e => af('teamBudget', Number(e.target.value))} className="tn-field-input" />
+                  <p style={{ fontSize: 11, color: 'rgba(248,250,252,0.3)', marginTop: 5 }}>Can be points, credits, or money — host decides the unit</p>
+                </div>
+                <div className="tn-form-2col">
+                  <div><label className="tn-field-label">Bid Increment</label><input type="number" value={auctionSetupForm.bidIncrement} onChange={e => af('bidIncrement', Number(e.target.value))} className="tn-field-input" /></div>
+                  <div><label className="tn-field-label">Bid Timeout (sec)</label><input type="number" value={auctionSetupForm.bidTimeout} onChange={e => af('bidTimeout', Number(e.target.value))} className="tn-field-input" /></div>
+                </div>
+                <div className="tn-form-2col">
+                  <div><label className="tn-field-label">Min Squad Size</label><input type="number" value={auctionSetupForm.minSquadSize} onChange={e => af('minSquadSize', Number(e.target.value))} className="tn-field-input" /></div>
+                  <div><label className="tn-field-label">Max Squad Size</label><input type="number" value={auctionSetupForm.maxSquadSize} onChange={e => af('maxSquadSize', Number(e.target.value))} className="tn-field-input" /></div>
+                </div>
+                <button className="tn-btn-primary" style={{ flex: 'none', width: '100%', padding: '13px 0', fontSize: 13 }} onClick={handleStartAuction} disabled={creatingAuction}>
+                  {creatingAuction ? <><Spinner dark />Creating...</> : '🔨 Create Auction & Open Dashboard'}
+                </button>
               </div>
             </div>
           </div>
-        );
-      })()}
+        )}
 
-      {/* ── Auction Setup Modal ─────────────────────────────────────── */}
-      {showAuctionSetup && auctionSetupTournament && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAuctionSetup(false)} />
-          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
-            <div className="p-6 bg-gradient-to-br from-primary-600 to-primary-400 text-white rounded-t-3xl">
-              <div className="flex items-center justify-between">
+        {/* Create Tournament Modal */}
+        {showCreateModal && (
+          <div className="tn-modal-overlay" onClick={() => setShowCreateModal(false)}>
+            <div className="tn-modal tn-modal-lg" onClick={(e) => e.stopPropagation()}>
+              <div className="tn-modal-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h2 className="text-xl font-black">🔨 Start Auction</h2>
-                  <p className="text-primary-100 text-sm mt-0.5">{auctionSetupTournament.name}</p>
+                  <div className="tn-modal-sub">New Event</div>
+                  <div className="tn-modal-title">Create Tournament</div>
                 </div>
-                <button onClick={() => setShowAuctionSetup(false)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30">✕</button>
+                <button className="tn-modal-close" onClick={() => setShowCreateModal(false)}>✕</button>
               </div>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Starting Budget per Team</label>
-                <input type="number" value={auctionSetupForm.teamBudget}
-                  onChange={e => af('teamBudget', Number(e.target.value))}
-                  className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-primary-400 focus:outline-none text-sm" />
-                <p className="text-xs text-gray-400 mt-1">Can be points (e.g. 1000), credits, or money — host decides the unit</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="tn-modal-body">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Bid Increment</label>
-                  <input type="number" value={auctionSetupForm.bidIncrement}
-                    onChange={e => af('bidIncrement', Number(e.target.value))}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-primary-400 focus:outline-none text-sm" />
+                  <label className="tn-field-label">Tournament Name *</label>
+                  <input type="text" value={createForm.name} onChange={(e) => cf('name', e.target.value)} placeholder="e.g. Champions Cricket League 2026" className="tn-field-input" />
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Bid Timeout (sec)</label>
-                  <input type="number" value={auctionSetupForm.bidTimeout}
-                    onChange={e => af('bidTimeout', Number(e.target.value))}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-primary-400 focus:outline-none text-sm" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Min Squad Size</label>
-                  <input type="number" value={auctionSetupForm.minSquadSize}
-                    onChange={e => af('minSquadSize', Number(e.target.value))}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-primary-400 focus:outline-none text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Max Squad Size</label>
-                  <input type="number" value={auctionSetupForm.maxSquadSize}
-                    onChange={e => af('maxSquadSize', Number(e.target.value))}
-                    className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-primary-400 focus:outline-none text-sm" />
-                </div>
-              </div>
-              <button
-                onClick={handleStartAuction}
-                disabled={creatingAuction}
-                className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-400 text-white rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {creatingAuction
-                  ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Creating...</>
-                  : '🔨 Create Auction & Open Dashboard'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Create Tournament Modal ─────────────────────────────────── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
-          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in">
-            {/* Header */}
-            <div className="p-6 bg-gradient-to-br from-primary-600 to-primary-400 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-black">Create Tournament</h2>
-                  <p className="text-violet-200 text-sm mt-0.5">Set up a new event for teams to join</p>
-                </div>
-                <button onClick={() => setShowCreateModal(false)} className="w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors">✕</button>
-              </div>
-            </div>
-
-            {/* Form */}
-            <div className="p-6 space-y-4">
-              {/* Name */}
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Tournament Name *</label>
-                <input type="text" value={createForm.name} onChange={(e) => cf('name', e.target.value)}
-                  placeholder="e.g. Champions Cricket League 2026" className="input-field" />
-              </div>
-
-              {/* Sport + Competition type */}
-              <div className="grid grid-cols-2 gap-3">
-                <SelectField label="Sport" value={createForm.sport} onChange={(v) => cf('sport', v)} required>
-                  {Object.keys(SPORT_META).map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
-                </SelectField>
-                <SelectField
-                  label="Type"
-                  value={createForm.competitionType}
-                  onChange={(v) => {
-                    cf('competitionType', v);
-                    // Auto-sync format: League type → League format
-                    if (v === 'LEAGUE') cf('format', 'LEAGUE');
-                    else if (createForm.format === 'LEAGUE') cf('format', 'KNOCKOUT');
-                  }}
-                  required>
-                  <option value="TOURNAMENT">🏆 Tournament (Teams)</option>
-                  <option value="LEAGUE">👤 League (Players)</option>
-                </SelectField>
-              </div>
-
-              {/* Format */}
-              {createForm.competitionType !== 'LEAGUE' && (
-                <SelectField label="Format" value={createForm.format} onChange={(v) => cf('format', v)} required>
-                  <option value="KNOCKOUT">⚔️ Knockout</option>
-                  <option value="GROUP_KNOCKOUT">🏟️ Group + Knockout</option>
-                </SelectField>
-              )}
-              {createForm.competitionType === 'LEAGUE' && (
-                <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-2xl border border-violet-100">
-                  <span className="text-lg">🔄</span>
+                <div className="tn-form-2col">
                   <div>
-                    <p className="text-xs font-bold text-violet-700">League Format</p>
-                    <p className="text-xs text-violet-500">Round-robin style — all teams/players compete against each other</p>
+                    <label className="tn-field-label">Sport *</label>
+                    <select value={createForm.sport} onChange={(e) => cf('sport', e.target.value)} className="tn-field-select">
+                      {Object.keys(SPORT_META).map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="tn-field-label">Type *</label>
+                    <select value={createForm.competitionType} onChange={(e) => { cf('competitionType', e.target.value); if (e.target.value === 'LEAGUE') cf('format', 'LEAGUE'); else if (createForm.format === 'LEAGUE') cf('format', 'KNOCKOUT'); }} className="tn-field-select">
+                      <option value="TOURNAMENT">🏆 Tournament (Teams)</option>
+                      <option value="LEAGUE">👤 League (Players)</option>
+                    </select>
                   </div>
                 </div>
-              )}
-
-              {/* Venue */}
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Venue *</label>
-                <input type="text" value={createForm.venue} onChange={(e) => cf('venue', e.target.value)}
-                  placeholder="e.g. SportsPlex, Mumbai" className="input-field" />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+                {createForm.competitionType !== 'LEAGUE' ? (
+                  <div>
+                    <label className="tn-field-label">Format *</label>
+                    <select value={createForm.format} onChange={(e) => cf('format', e.target.value)} className="tn-field-select">
+                      <option value="KNOCKOUT">⚔️ Knockout</option>
+                      <option value="GROUP_KNOCKOUT">🏟️ Group + Knockout</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="tn-league-info">
+                    <span style={{ fontSize: 18 }}>🔄</span>
+                    <div>
+                      <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#00b4d8' }}>League Format</div>
+                      <div style={{ fontSize: 12, color: 'rgba(248,250,252,0.35)', marginTop: 2 }}>Round-robin style — all teams/players compete against each other</div>
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Start Date *</label>
-                  <input type="date" value={createForm.startDate} onChange={(e) => cf('startDate', e.target.value)} className="input-field" />
+                  <label className="tn-field-label">Venue *</label>
+                  <input type="text" value={createForm.venue} onChange={(e) => cf('venue', e.target.value)} placeholder="e.g. SportsPlex, Mumbai" className="tn-field-input" />
+                </div>
+                <div className="tn-form-2col">
+                  <div><label className="tn-field-label">Start Date *</label><input type="date" value={createForm.startDate} onChange={(e) => cf('startDate', e.target.value)} className="tn-field-input" /></div>
+                  <div><label className="tn-field-label">End Date *</label><input type="date" value={createForm.endDate} onChange={(e) => cf('endDate', e.target.value)} className="tn-field-input" /></div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">End Date *</label>
-                  <input type="date" value={createForm.endDate} onChange={(e) => cf('endDate', e.target.value)} className="input-field" />
+                  <label className="tn-field-label">Registration Deadline *</label>
+                  <input type="date" value={createForm.registrationDeadline} onChange={(e) => cf('registrationDeadline', e.target.value)} className="tn-field-input" />
+                  <p className="tn-field-hint">⚠️ Must be strictly before the start date</p>
                 </div>
-              </div>
-
-              {/* Registration deadline */}
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Registration Deadline *</label>
-                <input type="date" value={createForm.registrationDeadline} onChange={(e) => cf('registrationDeadline', e.target.value)} className="input-field" />
-                <p className="text-xs text-amber-600 mt-1">⚠️ Must be strictly before the start date</p>
-              </div>
-
-              {/* Fee + Capacity */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Entry Fee (₹)</label>
-                  <input type="number" min="0" value={createForm.registrationFee} onChange={(e) => cf('registrationFee', e.target.value)} className="input-field" />
+                <div className="tn-form-2col">
+                  <div><label className="tn-field-label">Entry Fee (₹)</label><input type="number" min="0" value={createForm.registrationFee} onChange={(e) => cf('registrationFee', e.target.value)} className="tn-field-input" /></div>
+                  <div><label className="tn-field-label">Team Capacity</label><input type="number" min="2" value={createForm.teamCapacity} onChange={(e) => cf('teamCapacity', e.target.value)} className="tn-field-input" /></div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Team Capacity</label>
-                  <input type="number" min="2" value={createForm.teamCapacity} onChange={(e) => cf('teamCapacity', e.target.value)} className="input-field" />
+                <div className="tn-btn-row">
+                  <button className="tn-btn-ghost" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                  <button className="tn-btn-primary" onClick={handleCreateTournament} disabled={creating}>
+                    {creating ? <><Spinner dark />Creating…</> : '+ Create Tournament'}
+                  </button>
                 </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleCreateTournament} disabled={creating}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-400 text-white font-bold text-sm hover:from-primary-700 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {creating ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Creating…</> : '+ Create Tournament'}
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }
 
